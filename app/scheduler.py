@@ -43,7 +43,7 @@ def _poll_radarr():
                 continue
             label = f"Movie: {movie.get('title')} ({movie.get('year')})"
             host_path = mf.get("path")
-            bad = detect.broken_reason(host_path) if host_path else None
+            bad = detect.broken_reason(host_path, deep=True) if host_path else None
             if bad:
                 issue_id, acted = actions.auto_replace_broken(
                     "radarr", movie.get("id"), label, bad,
@@ -107,7 +107,7 @@ def _poll_sonarr():
                 f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
             )
             host_path = ef.get("path")
-            bad = detect.broken_reason(host_path) if host_path else None
+            bad = detect.broken_reason(host_path, deep=True) if host_path else None
             if bad:
                 issue_id, acted = actions.auto_replace_broken(
                     "sonarr", series.get("id"), label, bad,

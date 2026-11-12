@@ -48,8 +48,13 @@ def _check_one(source, *, ext_id, label, file_id, path, media_info, size,
     """Same dispatch order as webhooks.py/scheduler.py: broken-file check
     first (fully automatic, no button), otherwise the softer media-info
     checks (Ignore/Fix-now UI). Always marks the file scanned afterward,
-    whatever the outcome, so it's never picked again."""
-    bad = detect.broken_reason(path) if path else None
+    whatever the outcome, so it's never picked again.
+
+    deep=True: this is specifically what the backlog scanner is for - a real
+    ffmpeg decode test against the library that predates this app, not just
+    the cheap zero-fill/format check. Runs on its own background thread, so
+    the per-file cost (seconds of real decode time) doesn't block anything."""
+    bad = detect.broken_reason(path, deep=True) if path else None
     if bad:
         issue_id, acted = actions.auto_replace_broken(
             source, ext_id, label, bad,

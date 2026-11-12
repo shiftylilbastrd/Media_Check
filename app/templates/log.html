@@ -18,7 +18,11 @@
   </div>
 </div>
 
-<form method="get" style="margin-bottom:16px; display:flex; gap:12px; align-items:center;">
+<form method="get" style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+  <label style="font-size:13px; color:#888;">Search
+    <input type="text" name="q" value="{{ q_filter }}" placeholder="Title..."
+           style="background:#1a1d24; border:1px solid #333; color:#eee; border-radius:4px; padding:4px 8px;">
+  </label>
   <label style="font-size:13px; color:#888;">Source
     <select name="source" onchange="this.form.submit()">
       <option value="" {{ 'selected' if not source_filter }}>All</option>
@@ -35,9 +39,12 @@
       <option value="skipped" {{ 'selected' if result_filter == 'skipped' }}>Skipped</option>
     </select>
   </label>
-  {% if source_filter or result_filter %}
+  <button type="submit" style="font-size:13px; padding:4px 10px;">Filter</button>
+  {% if source_filter or result_filter or q_filter %}
     <a href="{{ url_for('queue_ui.log') }}" style="font-size:13px;">Clear filters</a>
   {% endif %}
+  <a href="{{ url_for('queue_ui.log_export', source=source_filter or None, result=result_filter or None, q=q_filter or None) }}"
+     style="font-size:13px; margin-left:auto;">&#8595; Download CSV ({{ total }} row{{ '' if total == 1 else 's' }})</a>
 </form>
 
 {% if recent %}
@@ -47,7 +54,7 @@
   {% for row in recent %}
     <tr>
       <td class="label">{{ row.label or ('file #' ~ row.file_id) }}</td>
-      <td>{{ row.source }}</td>
+      <td>{{ row.source|capitalize }}</td>
       <td>
         {% if not row.result %}
           <span class="cat pill-ok">clean</span>
@@ -65,7 +72,7 @@
   {% endfor %}
   </tbody>
 </table>
-{{ pager('queue_ui.log', page, per_page, total, per_page_choices, extra_args={'source': source_filter, 'result': result_filter}) }}
+{{ pager('queue_ui.log', page, per_page, total, per_page_choices, extra_args={'source': source_filter, 'result': result_filter, 'q': q_filter}) }}
 {% else %}
 <div class="empty">Nothing scanned matches this filter.</div>
 {% endif %}

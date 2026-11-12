@@ -22,7 +22,7 @@
   {% for row in pending %}
     <tr>
       <td class="label">{{ row.label }}</td>
-      <td>{{ row.source }}</td>
+      <td>{{ row.source|capitalize }}</td>
       <td title="{{ row.enqueued_at[:16] }}">{{ row.enqueued_at|timeago }}</td>
     </tr>
   {% endfor %}

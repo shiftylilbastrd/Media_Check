@@ -88,7 +88,33 @@ def init_db():
         """
     )
     conn.commit()
+    _migrate_strip_label_prefixes(conn)
     conn.close()
+
+
+def _migrate_strip_label_prefixes(conn):
+    """One-time cleanup: rows written before the Movie:/TV: prefix was
+    dropped from label construction still have it baked into their stored
+    label text (changing how a label gets built doesn't touch rows already
+    in the DB). Strips it from every table that stores a label, once, so
+    existing history matches what new rows look like. Guarded by a settings
+    flag so this doesn't re-scan every table on every startup forever."""
+    if conn.execute(
+        "SELECT value FROM settings WHERE key='migrated_label_prefix_removed'"
+    ).fetchone():
+        return
+    for table in ("scanned", "queue", "issues"):
+        for prefix in ("Movie: ", "TV: "):
+            conn.execute(
+                f"UPDATE {table} SET label = SUBSTR(label, ?) "
+                f"WHERE label LIKE ? || '%'",
+                (len(prefix) + 1, prefix),
+            )
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('migrated_label_prefix_removed', '1') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    )
+    conn.commit()
 
 
 def now():
@@ -253,23 +279,28 @@ RESULT_FILTERS = {
 }
 
 
-def _scanned_filter_clause(source=None, result=None):
+def _scanned_filter_clause(source=None, result=None, q=None):
     clauses, params = [], []
     if source:
         clauses.append("source=?")
         params.append(source)
     if result and result in RESULT_FILTERS:
         clauses.append(RESULT_FILTERS[result])
+    if q:
+        clauses.append("label LIKE ? ESCAPE '\\'")
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     return where, params
 
 
-def list_recent_scanned(limit=30, offset=0, source=None, result=None):
+def list_recent_scanned(limit=30, offset=0, source=None, result=None, q=None):
     """Most recent backlog-scan activity, newest first, optionally filtered
-    by source ('radarr'/'sonarr') and/or result bucket (RESULT_FILTERS) -
-    this is what the Log UI page shows so there's visible proof of what the
-    worker's actually doing, not just a silent file count."""
-    where, params = _scanned_filter_clause(source, result)
+    by source ('radarr'/'sonarr'), result bucket (RESULT_FILTERS), and/or a
+    free-text title search (q, matched against label) - this is what the
+    Log UI page shows so there's visible proof of what the worker's
+    actually doing, not just a silent file count."""
+    where, params = _scanned_filter_clause(source, result, q)
     conn = get_conn()
     rows = conn.execute(
         f"SELECT source, file_id, label, result, scanned_at, duration_ms FROM scanned"
@@ -280,14 +311,28 @@ def list_recent_scanned(limit=30, offset=0, source=None, result=None):
     return [dict(r) for r in rows]
 
 
-def count_recent_scanned(source=None, result=None):
+def count_recent_scanned(source=None, result=None, q=None):
     """Matches list_recent_scanned()'s filtering, for the Log page's
     pagination total when a filter is active."""
-    where, params = _scanned_filter_clause(source, result)
+    where, params = _scanned_filter_clause(source, result, q)
     conn = get_conn()
     row = conn.execute(f"SELECT COUNT(*) AS n FROM scanned{where}", params).fetchone()
     conn.close()
     return row["n"]
+
+
+def iter_all_scanned(source=None, result=None, q=None):
+    """Every matching row, newest first, no limit - for CSV export of the
+    full filtered list rather than just the current page."""
+    where, params = _scanned_filter_clause(source, result, q)
+    conn = get_conn()
+    rows = conn.execute(
+        f"SELECT source, file_id, label, result, scanned_at, duration_ms FROM scanned"
+        f"{where} ORDER BY scanned_at DESC",
+        params,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def list_issues(status=None):

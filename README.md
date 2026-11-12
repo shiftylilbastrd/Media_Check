@@ -72,7 +72,7 @@ Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
 
 ## Setup
 
-1. `docker compose up -d --build` (see below).
+1. Add the container (see Deployment below).
 2. Open the UI (port 8585) → **Settings** → enter Radarr/Sonarr/Plex URL +
    API key/token.
 3. In Radarr and Sonarr: **Settings → Connect → Add → Webhook**, URL
@@ -82,15 +82,27 @@ Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
 
 ## Deployment (Athena)
 
-Built and run via Docker Compose from a local clone of this repo, so a
-recovery after any docker-folder rebuild is just:
+**Primary: Unraid container template, image from GHCR.** A GitHub Actions
+workflow (`.github/workflows/publish.yml`) builds the image and pushes it to
+`ghcr.io/shiftylilbastrd/media-check-tools:latest` on every push to `main` -
+so Athena never builds anything itself. Add it in Unraid like any other
+Community App:
+
+- **Repository**: `ghcr.io/shiftylilbastrd/media-check-tools:latest`
+- **Port**: `8585:8585`
+- **Path**: `/mnt/user/appdata/media-check-tools` → `/data`
+- **Path**: `/mnt/user` → `/mnt/user` (read/write - needed for decode-test
+  reads and deleting confirmed-broken files)
+
+No state worth keeping lives in the image - only in the mounted SQLite file
+(and the raw webhook debug log) under `/data`. A docker-folder wipe is just
+Unraid re-pulling the image and recreating the container from the template -
+no git clone, no local build, no manual steps.
+
+**Alternative: Docker Compose**, for anyone who'd rather build locally from
+a clone of this repo instead of pulling from GHCR:
 
 ```bash
 git pull
 docker compose up -d --build
 ```
-
-No state worth keeping lives in the image — only in the mounted SQLite file
-(and the raw webhook debug log) under `/data`, and the compose/Dockerfile
-source, both of which this repo (or Athena's appdata share) is the durable
-copy of.

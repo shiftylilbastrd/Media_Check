@@ -10,6 +10,12 @@
                id="{{ key }}" name="{{ key }}" value="{{ values[key] }}"
                placeholder="{{ placeholder }}" autocomplete="off">
       {% endfor %}
+      {% if test_service == "plex" %}
+        <p class="test-row">
+          <a href="{{ url_for('settings.plex_connect') }}"><button type="button">Sign in with Plex</button></a>
+          <span style="color:#888; font-size:13px;">or paste a token above</span>
+        </p>
+      {% endif %}
       {% if test_service %}
         <p class="test-row">
           <button type="button" class="test-btn" data-service="{{ test_service }}"

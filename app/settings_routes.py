@@ -1,7 +1,8 @@
 import requests
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 
 from . import db
+from . import plex_sso
 
 bp = Blueprint("settings", __name__)
 
@@ -56,6 +57,29 @@ def edit():
     return render_template(
         "settings.html", sections=SECTIONS, values=values, test_fields=TEST_FIELD_MAP,
     )
+
+
+@bp.route("/settings/plex/connect")
+def plex_connect():
+    pin_id, code = plex_sso.create_pin()
+    session["plex_pin_id"] = pin_id
+    forward = url_for("settings.plex_callback", _external=True)
+    return redirect(plex_sso.auth_url(code, forward))
+
+
+@bp.route("/settings/plex/callback")
+def plex_callback():
+    pin_id = session.pop("plex_pin_id", None)
+    if not pin_id:
+        flash("Plex sign-in session expired - try again.")
+        return redirect(url_for("settings.edit"))
+    token = plex_sso.check_pin(pin_id)
+    if not token:
+        flash("Plex sign-in didn't finish - try again.")
+        return redirect(url_for("settings.edit"))
+    db.set_setting("plex_token", token)
+    flash("Signed in with Plex.")
+    return redirect(url_for("settings.edit"))
 
 
 @bp.route("/settings/test/<service>", methods=["POST"])

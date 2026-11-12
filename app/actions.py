@@ -10,7 +10,17 @@ from datetime import datetime, timezone
 from . import arr_client
 from . import db
 
-MAX_AUTO_REPLACE_PER_DAY = 10
+# A brake on how many files get auto-deleted+re-searched in one day, not a
+# throughput limit on scanning - the backlog scanner checks far more files
+# than this daily, but the overwhelming majority of a normal library is
+# fine, so under normal conditions this should rarely if ever be reached.
+# It exists so that a systemic false-positive (a bad ffmpeg build, a flaky
+# mount, a bug in detect.py) can't bulk-delete a big chunk of the library
+# and fire off dozens of re-searches before anyone notices - hitting it is
+# meant to be a signal ("check manually"), not a routine ceiling. Override
+# via the MAX_AUTO_REPLACE_PER_DAY env var if a one-time backlog sweep is
+# legitimately turning up more than this many genuinely broken files.
+MAX_AUTO_REPLACE_PER_DAY = int(os.environ.get("MAX_AUTO_REPLACE_PER_DAY", "10"))
 
 
 def _auto_replace_count_today():

@@ -78,9 +78,17 @@ def check_one(source, *, ext_id, label, file_id, path, media_info, size,
             source, ext_id, label, bad,
             episode_id=episode_id, file_id=file_id, download_id=download_id, path=path,
         )
+        issue = db.get_issue(issue_id)
         if acted:
-            notify.send(f"media-check (backlog): {label}", db.get_issue(issue_id)["reason"])
-        result = f"broken: {bad}"
+            notify.send(f"media-check (backlog): {label}", issue["reason"])
+        # auto_fixed = handled with no interaction needed, so the Log (not
+        # Issues) is where that outcome belongs - anything still "open"
+        # (e.g. past the daily cap) stays under "broken" since it still
+        # needs a manual Ignore/Fix-now decision on the Issues page.
+        if issue and issue["status"] == "auto_fixed":
+            result = f"auto-fixed: {issue['reason']}"
+        else:
+            result = f"broken: {issue['reason'] if issue else bad}"
     else:
         problems = detect.check_media_info(media_info, size, listed_runtime, expect_languages)
         new_problems = [

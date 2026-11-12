@@ -269,13 +269,20 @@ def list_queue(limit=50, offset=0):
 
 
 # Result-filter buckets for the Log page - matched against the `result`
-# column's own conventions (NULL = clean, "broken: ..."/"skipped: ..."
+# column's own conventions (NULL = clean, "broken:"/"auto-fixed:"/"skipped:"
 # prefixes, anything else = a soft media-info issue joined by "; ").
+# "auto-fixed" is its own bucket, separate from "broken": those files were
+# handled automatically (deleted, blocklisted, re-searched) with no
+# interaction needed, so they don't belong on the Issues page - "broken"
+# means still open and needing a manual Ignore/Fix-now call (e.g. past the
+# daily auto-replace cap).
 RESULT_FILTERS = {
     "clean": "result IS NULL",
     "broken": "result LIKE 'broken:%'",
+    "auto_fixed": "result LIKE 'auto-fixed:%'",
     "skipped": "result LIKE 'skipped:%'",
-    "issue": "result IS NOT NULL AND result NOT LIKE 'broken:%' AND result NOT LIKE 'skipped:%'",
+    "issue": "result IS NOT NULL AND result NOT LIKE 'broken:%' "
+             "AND result NOT LIKE 'auto-fixed:%' AND result NOT LIKE 'skipped:%'",
 }
 
 

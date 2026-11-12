@@ -51,9 +51,17 @@ def _process_queue_item(item):
             episode_id=item["episode_id"], file_id=item["file_id"],
             download_id=item["download_id"], path=item["path"],
         )
+        issue = db.get_issue(issue_id)
         if acted:
-            notify.send(f"media-check: {item['label']}", db.get_issue(issue_id)["reason"])
-        result = f"broken: {bad}"
+            notify.send(f"media-check: {item['label']}", issue["reason"])
+        # auto_fixed = handled with no interaction needed, so the Log (not
+        # Issues) is where that outcome belongs - anything still "open"
+        # (e.g. past the daily cap) stays under "broken" since it still
+        # needs a manual Ignore/Fix-now decision on the Issues page.
+        if issue and issue["status"] == "auto_fixed":
+            result = f"auto-fixed: {issue['reason']}"
+        else:
+            result = f"broken: {issue['reason'] if issue else bad}"
     else:
         result = None
     db.mark_scanned(item["source"], item["file_id"], label=item["label"], result=result,

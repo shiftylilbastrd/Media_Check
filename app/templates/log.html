@@ -34,7 +34,8 @@
     <select name="result" onchange="this.form.submit()">
       <option value="" {{ 'selected' if not result_filter }}>All</option>
       <option value="clean" {{ 'selected' if result_filter == 'clean' }}>Clean</option>
-      <option value="broken" {{ 'selected' if result_filter == 'broken' }}>Broken</option>
+      <option value="broken" {{ 'selected' if result_filter == 'broken' }}>Broken (needs attention)</option>
+      <option value="auto_fixed" {{ 'selected' if result_filter == 'auto_fixed' }}>Auto-fixed</option>
       <option value="issue" {{ 'selected' if result_filter == 'issue' }}>Soft issue</option>
       <option value="skipped" {{ 'selected' if result_filter == 'skipped' }}>Skipped</option>
     </select>
@@ -60,6 +61,8 @@
           <span class="cat pill-ok">clean</span>
         {% elif row.result.startswith('skipped:') %}
           <span class="cat">{{ row.result }}</span>
+        {% elif row.result.startswith('auto-fixed:') %}
+          <span class="cat pill-fixed">{{ row.result }}</span>
         {% elif row.result.startswith('broken:') %}
           <span class="cat pill-bad">{{ row.result }}</span>
         {% else %}

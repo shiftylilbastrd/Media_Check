@@ -17,6 +17,7 @@ from flask import Blueprint, request, jsonify
 from . import actions
 from . import db
 from . import detect
+from . import notify
 
 bp = Blueprint("webhooks", __name__)
 
@@ -48,21 +49,31 @@ def radarr_webhook():
 
         bad = detect.broken_reason(host_path) if host_path else None
         if bad:
-            actions.auto_replace_broken(
+            issue_id, acted = actions.auto_replace_broken(
                 "radarr", movie.get("id"), label, bad,
                 file_id=mf.get("id"), download_id=payload.get("downloadId"),
                 path=host_path,
             )
+            if acted:
+                notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
         else:
-            for category, reason in detect.check_media_info(
+            problems = detect.check_media_info(
                 media_info, mf.get("size", 0), movie.get("runtime", 0),
                 expect_languages=["eng"],
-            ):
+            )
+            new_problems = [
+                (category, reason) for category, reason in problems
+                if db.find_issue("radarr", mf.get("id"), category) is None
+            ]
+            for category, reason in problems:
                 db.record_issue(
                     "radarr", movie.get("id"), label, category, reason,
                     file_id=mf.get("id"), download_id=payload.get("downloadId"),
                     path=host_path,
                 )
+            if new_problems:
+                body = "\n".join(f"- {reason}" for _, reason in new_problems)
+                notify.send(f"media-check-tools: {label}", body)
     except Exception:
         _log_raw("radarr-parse-error", {"traceback": traceback.format_exc()})
     return jsonify(ok=True), 200
@@ -89,21 +100,31 @@ def sonarr_webhook():
 
         bad = detect.broken_reason(host_path) if host_path else None
         if bad:
-            actions.auto_replace_broken(
+            issue_id, acted = actions.auto_replace_broken(
                 "sonarr", series.get("id"), label, bad,
                 episode_id=ep.get("id"), file_id=ef.get("id"),
                 download_id=payload.get("downloadId"), path=host_path,
             )
+            if acted:
+                notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
         else:
-            for category, reason in detect.check_media_info(
+            problems = detect.check_media_info(
                 media_info, ef.get("size", 0), series.get("runtime", 0),
                 expect_languages=["eng", "jpn"] if is_anime else ["eng"],
-            ):
+            )
+            new_problems = [
+                (category, reason) for category, reason in problems
+                if db.find_issue("sonarr", ef.get("id"), category) is None
+            ]
+            for category, reason in problems:
                 db.record_issue(
                     "sonarr", series.get("id"), label, category, reason,
                     episode_id=ep.get("id"), file_id=ef.get("id"),
                     download_id=payload.get("downloadId"), path=host_path,
                 )
+            if new_problems:
+                body = "\n".join(f"- {reason}" for _, reason in new_problems)
+                notify.send(f"media-check-tools: {label}", body)
     except Exception:
         _log_raw("sonarr-parse-error", {"traceback": traceback.format_exc()})
     return jsonify(ok=True), 200

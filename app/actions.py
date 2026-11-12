@@ -23,35 +23,46 @@ def _auto_replace_count_today():
 
 def auto_replace_broken(source, ext_id, label, reason, *, episode_id=None,
                          file_id=None, download_id=None, path=None):
-    """Always succeeds in the sense that it records *something* - a failure
-    partway through becomes an open issue explaining what to check manually,
-    same as the old script's fallback messages."""
+    """Returns (issue_id, acted). `acted` is False when this exact file was
+    already handled (successfully, or given up on past the daily cap) by a
+    previous run - the daily fallback poll re-scans a ~26h window, so without
+    this guard it would re-attempt deleting an already-deleted file every day
+    it stays in that window. A failed-delete/still-on-disk result stays
+    'open', so those ARE retried on the next run - only a genuinely finished
+    outcome is skipped."""
+    existing = db.find_issue(source, file_id, "broken")
+    if existing and existing["status"] != "open":
+        return existing["id"], False
+
     if _auto_replace_count_today() >= MAX_AUTO_REPLACE_PER_DAY:
-        return db.record_issue(
+        issue_id = db.record_issue(
             source, ext_id, label, "broken",
             f"{reason} - NOT auto-replaced (more than {MAX_AUTO_REPLACE_PER_DAY} "
             f"today, check manually)",
             episode_id=episode_id, file_id=file_id, download_id=download_id, path=path,
         )
+        return issue_id, True
 
     try:
         arr_client.delete_file(source, file_id)
     except Exception as e:
-        return db.record_issue(
+        issue_id = db.record_issue(
             source, ext_id, label, "broken",
             f"{reason} - could not delete it through {source.capitalize()}: {e}",
             episode_id=episode_id, file_id=file_id, download_id=download_id, path=path,
         )
+        return issue_id, True
 
     if path and os.path.isfile(path):
         try:
             os.remove(path)
         except OSError as e:
-            return db.record_issue(
+            issue_id = db.record_issue(
                 source, ext_id, label, "broken",
                 f"{reason} - deleted in {source.capitalize()} but still on disk: {e}",
                 episode_id=episode_id, file_id=file_id, download_id=download_id, path=path,
             )
+            return issue_id, True
 
     try:
         blocklisted = arr_client.blocklist_release(source, download_id)
@@ -65,8 +76,9 @@ def auto_replace_broken(source, ext_id, label, reason, *, episode_id=None,
     except Exception as e:
         how += f", new search failed to start: {e}"
 
-    return db.record_issue(
+    issue_id = db.record_issue(
         source, ext_id, label, "broken", f"{reason} - deleted, {how}",
         episode_id=episode_id, file_id=file_id, download_id=download_id, path=path,
         status="auto_fixed",
     )
+    return issue_id, True

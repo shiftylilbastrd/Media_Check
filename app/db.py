@@ -125,6 +125,16 @@ def list_issues(status=None):
     return [dict(r) for r in rows]
 
 
+def find_issue(source, file_id, category):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM issues WHERE source=? AND file_id=? AND category=?",
+        (source, file_id, category),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_issue(issue_id):
     conn = get_conn()
     row = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()

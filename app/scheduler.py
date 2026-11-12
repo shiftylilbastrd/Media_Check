@@ -12,6 +12,7 @@ from . import actions
 from . import arr_client
 from . import db
 from . import detect
+from . import notify
 
 POLL_INTERVAL_SECONDS = 24 * 3600
 LOOKBACK_HOURS = 26  # same overlap the old hourly script used
@@ -41,19 +42,29 @@ def _poll_radarr():
         host_path = mf.get("path")
         bad = detect.broken_reason(host_path) if host_path else None
         if bad:
-            actions.auto_replace_broken(
+            issue_id, acted = actions.auto_replace_broken(
                 "radarr", movie.get("id"), label, bad,
                 file_id=file_id, download_id=rec.get("downloadId"), path=host_path,
             )
+            if acted:
+                notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
             continue
-        for category, reason in detect.check_media_info(
+        problems = detect.check_media_info(
             mf.get("mediaInfo") or {}, mf.get("size", 0), movie.get("runtime", 0),
             expect_languages=["eng"],
-        ):
+        )
+        new_problems = [
+            (category, reason) for category, reason in problems
+            if db.find_issue("radarr", file_id, category) is None
+        ]
+        for category, reason in problems:
             db.record_issue(
                 "radarr", movie.get("id"), label, category, reason,
                 file_id=file_id, download_id=rec.get("downloadId"), path=host_path,
             )
+        if new_problems:
+            body = "\n".join(f"- {reason}" for _, reason in new_problems)
+            notify.send(f"media-check-tools: {label}", body)
 
 
 def _poll_sonarr():
@@ -85,21 +96,31 @@ def _poll_sonarr():
         host_path = ef.get("path")
         bad = detect.broken_reason(host_path) if host_path else None
         if bad:
-            actions.auto_replace_broken(
+            issue_id, acted = actions.auto_replace_broken(
                 "sonarr", series.get("id"), label, bad,
                 episode_id=rec.get("episodeId"), file_id=file_id,
                 download_id=rec.get("downloadId"), path=host_path,
             )
+            if acted:
+                notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
             continue
-        for category, reason in detect.check_media_info(
+        problems = detect.check_media_info(
             ef.get("mediaInfo") or {}, ef.get("size", 0), series.get("runtime", 0),
             expect_languages=["eng", "jpn"] if is_anime else ["eng"],
-        ):
+        )
+        new_problems = [
+            (category, reason) for category, reason in problems
+            if db.find_issue("sonarr", file_id, category) is None
+        ]
+        for category, reason in problems:
             db.record_issue(
                 "sonarr", series.get("id"), label, category, reason,
                 episode_id=rec.get("episodeId"), file_id=file_id,
                 download_id=rec.get("downloadId"), path=host_path,
             )
+        if new_problems:
+            body = "\n".join(f"- {reason}" for _, reason in new_problems)
+            notify.send(f"media-check-tools: {label}", body)
 
 
 def _poll_once():

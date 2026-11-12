@@ -12,6 +12,8 @@ FIELDS = [
     ("sonarr_api_key", "Sonarr API Key", "", True),
     ("plex_url", "Plex URL", "http://192.168.1.13:32400", False),
     ("plex_token", "Plex Token", "", True),
+    ("pushover_token", "Pushover Application Token", "", True),
+    ("pushover_user_key", "Pushover User Key", "", True),
 ]
 
 

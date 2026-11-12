@@ -28,9 +28,15 @@ Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
     search command the broken-file auto-replace uses). Doesn't delete or
     blocklist the current file — only the automatic broken-file path does
     that, since those other issues aren't necessarily unplayable.
-- **Settings page** for Radarr/Sonarr/Plex URL + API key/token — entered
-  there directly, not auto-read from each app's own config.xml. Same pattern
-  every other arr-ecosystem app (Cleanuparr, Maintainerr, Prowlarr, …) uses.
+- **Settings page** for Radarr/Sonarr/Plex URL + API key/token, and a
+  Pushover application token + user key — entered there directly, not
+  auto-read from each app's own config.xml. Same pattern every other
+  arr-ecosystem app (Cleanuparr, Maintainerr, Prowlarr, …) uses.
+- **Pushover notifications**: fires once per genuinely new issue - a
+  broken-file auto-fix, or a newly-detected soft issue (foreign-only audio,
+  DV w/o HDR10, etc.) - not on every repeat sighting of something already
+  handled or already open. Silently does nothing if Pushover isn't
+  configured in Settings; a notification failure never breaks detection/fix.
 - SQLite for state (replaces `checked.txt` + the daily `report-*.txt` files).
 
 ## Known gaps

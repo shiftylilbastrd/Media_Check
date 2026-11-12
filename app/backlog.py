@@ -15,6 +15,8 @@ import threading
 import time
 import traceback
 
+import requests
+
 from . import actions
 from . import arr_client
 from . import db
@@ -117,12 +119,17 @@ def _scan_radarr(limit):
     candidates = _radarr_candidates(scanned, limit)
     for movie, mf in candidates:
         label = f"Movie: {movie.get('title')} ({movie.get('year')})"
-        _check_one(
-            "radarr", ext_id=movie.get("id"), label=label,
-            file_id=mf.get("id"), path=mf.get("path"),
-            media_info=mf.get("mediaInfo") or {}, size=mf.get("size", 0),
-            listed_runtime=movie.get("runtime", 0), expect_languages=["eng"],
-        )
+        try:
+            _check_one(
+                "radarr", ext_id=movie.get("id"), label=label,
+                file_id=mf.get("id"), path=mf.get("path"),
+                media_info=mf.get("mediaInfo") or {}, size=mf.get("size", 0),
+                listed_runtime=movie.get("runtime", 0), expect_languages=["eng"],
+            )
+        except Exception:
+            # one bad file should never stop the rest of this pass
+            print(f"[backlog] radarr file {mf.get('id')} check failed:\n"
+                  f"{traceback.format_exc()}", flush=True)
     return len(candidates)
 
 
@@ -130,7 +137,22 @@ def _scan_sonarr(limit):
     scanned = db.get_scanned_ids("sonarr")
     candidates = _sonarr_candidates(scanned, limit)
     for series, ep, file_id in candidates:
-        ef = arr_client.request_json("sonarr", "GET", f"/api/v3/episodefile/{file_id}")
+        try:
+            ef = arr_client.request_json("sonarr", "GET", f"/api/v3/episodefile/{file_id}")
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                # file got deleted/replaced between listing episodes and looking
+                # this one up - nothing left to check, and no point retrying it
+                db.mark_scanned("sonarr", file_id)
+                continue
+            print(f"[backlog] sonarr file {file_id} lookup failed:\n"
+                  f"{traceback.format_exc()}", flush=True)
+            continue
+        except Exception:
+            # one bad lookup should never stop the rest of this pass
+            print(f"[backlog] sonarr file {file_id} lookup failed:\n"
+                  f"{traceback.format_exc()}", flush=True)
+            continue
         if not ef:
             db.mark_scanned("sonarr", file_id)  # file record gone - nothing to check, don't retry
             continue
@@ -139,13 +161,17 @@ def _scan_sonarr(limit):
             f"TV: {series.get('title')} "
             f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
         )
-        _check_one(
-            "sonarr", ext_id=series.get("id"), label=label,
-            episode_id=ep.get("id"), file_id=file_id, path=ef.get("path"),
-            media_info=ef.get("mediaInfo") or {}, size=ef.get("size", 0),
-            listed_runtime=series.get("runtime", 0),
-            expect_languages=["eng", "jpn"] if is_anime else ["eng"],
-        )
+        try:
+            _check_one(
+                "sonarr", ext_id=series.get("id"), label=label,
+                episode_id=ep.get("id"), file_id=file_id, path=ef.get("path"),
+                media_info=ef.get("mediaInfo") or {}, size=ef.get("size", 0),
+                listed_runtime=series.get("runtime", 0),
+                expect_languages=["eng", "jpn"] if is_anime else ["eng"],
+            )
+        except Exception:
+            print(f"[backlog] sonarr file {file_id} check failed:\n"
+                  f"{traceback.format_exc()}", flush=True)
     return len(candidates)
 
 

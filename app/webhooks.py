@@ -55,7 +55,7 @@ def radarr_webhook():
                 path=host_path,
             )
             if acted:
-                notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
+                notify.send(f"media-check: {label}", db.get_issue(issue_id)["reason"])
         else:
             problems = detect.check_media_info(
                 media_info, mf.get("size", 0), movie.get("runtime", 0),
@@ -73,7 +73,7 @@ def radarr_webhook():
                 )
             if new_problems:
                 body = "\n".join(f"- {reason}" for _, reason in new_problems)
-                notify.send(f"media-check-tools: {label}", body)
+                notify.send(f"media-check: {label}", body)
             # Passed the fast shallow check - queue it for the real ffmpeg
             # decode test, which is too slow to run inline on this live HTTP
             # response. The worker thread picks new queue items up ahead of
@@ -117,7 +117,7 @@ def sonarr_webhook():
                 download_id=payload.get("downloadId"), path=host_path,
             )
             if acted:
-                notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
+                notify.send(f"media-check: {label}", db.get_issue(issue_id)["reason"])
         else:
             problems = detect.check_media_info(
                 media_info, ef.get("size", 0), series.get("runtime", 0),
@@ -135,7 +135,7 @@ def sonarr_webhook():
                 )
             if new_problems:
                 body = "\n".join(f"- {reason}" for _, reason in new_problems)
-                notify.send(f"media-check-tools: {label}", body)
+                notify.send(f"media-check: {label}", body)
             # See radarr_webhook() - queue for the real decode test instead
             # of running it inline on this live HTTP response.
             if host_path:

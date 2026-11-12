@@ -77,7 +77,7 @@ def check_one(source, *, ext_id, label, file_id, path, media_info, size,
             episode_id=episode_id, file_id=file_id, download_id=download_id, path=path,
         )
         if acted:
-            notify.send(f"media-check-tools (backlog): {label}", db.get_issue(issue_id)["reason"])
+            notify.send(f"media-check (backlog): {label}", db.get_issue(issue_id)["reason"])
         result = f"broken: {bad}"
     else:
         problems = detect.check_media_info(media_info, size, listed_runtime, expect_languages)
@@ -92,7 +92,7 @@ def check_one(source, *, ext_id, label, file_id, path, media_info, size,
             )
         if new_problems:
             body = "\n".join(f"- {reason}" for _, reason in new_problems)
-            notify.send(f"media-check-tools (backlog): {label}", body)
+            notify.send(f"media-check (backlog): {label}", body)
         result = "; ".join(reason for _, reason in problems) if problems else None
     db.mark_scanned(source, file_id, label=label, result=result)
 

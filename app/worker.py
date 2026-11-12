@@ -50,7 +50,7 @@ def _process_queue_item(item):
             download_id=item["download_id"], path=item["path"],
         )
         if acted:
-            notify.send(f"media-check-tools: {item['label']}", db.get_issue(issue_id)["reason"])
+            notify.send(f"media-check: {item['label']}", db.get_issue(issue_id)["reason"])
         result = f"broken: {bad}"
     else:
         result = None

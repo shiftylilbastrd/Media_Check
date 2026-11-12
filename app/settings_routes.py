@@ -135,7 +135,7 @@ def test(service):
                 "https://api.pushover.net/1/messages.json",
                 data={
                     "token": token, "user": user,
-                    "title": "media-check-tools", "message": "Test notification from Settings",
+                    "title": "media-check", "message": "Test notification from Settings",
                 },
                 timeout=15,
             )

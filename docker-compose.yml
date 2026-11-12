@@ -1,12 +1,15 @@
 services:
-  media-check-tools:
+  media-check:
     build: .
-    container_name: media-check-tools
+    container_name: media-check
     restart: unless-stopped
     ports:
       - "8585:8585"
     volumes:
       # Durable state (SQLite db + raw webhook debug log) - survives rebuilds.
+      # Folder name kept as-is across the media-check-tools -> media-check
+      # rename on purpose: this holds the existing DB, so renaming it would
+      # mean moving the actual data file.
       - /mnt/user/appdata/media-check-tools:/data
       # Mirrors Radarr/Sonarr's own container paths exactly (NOT the host
       # layout) - the `path` field in their webhooks/API is literally the

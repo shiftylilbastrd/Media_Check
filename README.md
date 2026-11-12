@@ -1,4 +1,4 @@
-# media-check-tools
+# media-check
 
 Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
 `Media import check` hourly bash script with a single always-running service.
@@ -96,13 +96,15 @@ Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
 
 **Primary: Unraid container template, image from GHCR.** A GitHub Actions
 workflow (`.github/workflows/publish.yml`) builds the image and pushes it to
-`ghcr.io/shiftylilbastrd/media-check-tools:latest` on every push to `main` -
+`ghcr.io/shiftylilbastrd/media-check:latest` on every push to `main` -
 so Athena never builds anything itself. Add it in Unraid like any other
 Community App:
 
-- **Repository**: `ghcr.io/shiftylilbastrd/media-check-tools:latest`
+- **Repository**: `ghcr.io/shiftylilbastrd/media-check:latest`
 - **Port**: `8585:8585`
-- **Path**: `/mnt/user/appdata/media-check-tools` → `/data`
+- **Path**: `/mnt/user/appdata/media-check-tools` → `/data` (kept at its
+  original folder name - this holds the existing SQLite DB, so it wasn't
+  renamed along with everything else to avoid any risk to that data)
 - **Path**: `/mnt/user/anime` → `/anime` (read/write)
 - **Path**: `/mnt/user/tv` → `/tv` (read/write)
 - **Path**: `/mnt/user/movies` → `/movies` (read/write)

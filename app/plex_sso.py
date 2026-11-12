@@ -8,7 +8,7 @@ import requests
 
 from . import db
 
-PRODUCT_NAME = "Media Check Tools"
+PRODUCT_NAME = "Media Check"
 TIMEOUT = 15
 
 

@@ -11,7 +11,11 @@ on:
   workflow_dispatch: {}
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  # Hardcoded lowercase - github.repository preserves the repo's actual
+  # case/punctuation (Media_Check), but Docker/GHCR tags must be lowercase,
+  # so deriving it from github.repository breaks the build (same bug hit
+  # on watch_sync/Watch_Sync earlier).
+  IMAGE: ghcr.io/shiftylilbastrd/media-check
 
 jobs:
   build-and-push:

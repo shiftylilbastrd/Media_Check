@@ -47,6 +47,8 @@ def init_db():
         conn.execute("ALTER TABLE scanned ADD COLUMN label TEXT")
     if "result" not in existing_cols:
         conn.execute("ALTER TABLE scanned ADD COLUMN result TEXT")
+    if "duration_ms" not in existing_cols:
+        conn.execute("ALTER TABLE scanned ADD COLUMN duration_ms INTEGER")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS queue (
@@ -72,7 +74,8 @@ def init_db():
             episode_id INTEGER,            -- episodeId (sonarr only)
             file_id INTEGER,               -- moviefile/episodefile id
             download_id TEXT,
-            label TEXT NOT NULL,           -- "Movie: Title (Year)" / "TV: Title SxxEyy"
+            label TEXT NOT NULL,           -- "Title (Year)" / "Title SxxEyy" - source column
+                                            -- already says radarr/sonarr, so no Movie:/TV: prefix
             category TEXT NOT NULL,        -- no_audio / no_english_audio / dv_no_hdr10 /
                                             -- runtime / small_size / decode_error / broken
             reason TEXT NOT NULL,
@@ -157,23 +160,26 @@ def get_scanned_ids(source):
     return {r["file_id"] for r in rows}
 
 
-def mark_scanned(source, file_id, label=None, result=None):
+def mark_scanned(source, file_id, label=None, result=None, duration_ms=None):
     """Record that this file has been checked at least once - regardless of
     whether a problem was found - so the backlog scanner never re-picks it.
 
-    label/result are purely for the Backlog UI page (what got checked, and
-    what came of it - None/empty result means "looked clean"). They don't
-    affect scan-skip logic at all, which is keyed on (source, file_id) alone.
-    ON CONFLICT updates rather than no-ops, so a second mark_scanned() call
-    for the same file (shouldn't normally happen, since it's only ever
-    called once a file's skipped afterward) still refreshes the display
-    instead of silently doing nothing."""
+    label/result/duration_ms are purely for the Log UI page (what got
+    checked, what came of it - None/empty result means "looked clean" - and
+    how long the check took). They don't affect scan-skip logic at all,
+    which is keyed on (source, file_id) alone. ON CONFLICT updates rather
+    than no-ops, so a second mark_scanned() call for the same file
+    (shouldn't normally happen, since it's only ever called once a file's
+    skipped afterward) still refreshes the display instead of silently
+    doing nothing."""
     conn = get_conn()
     conn.execute(
-        "INSERT INTO scanned (source, file_id, scanned_at, label, result) VALUES (?, ?, ?, ?, ?) "
+        "INSERT INTO scanned (source, file_id, scanned_at, label, result, duration_ms) "
+        "VALUES (?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(source, file_id) DO UPDATE SET "
-        "scanned_at=excluded.scanned_at, label=excluded.label, result=excluded.result",
-        (source, file_id, now(), label, result),
+        "scanned_at=excluded.scanned_at, label=excluded.label, result=excluded.result, "
+        "duration_ms=excluded.duration_ms",
+        (source, file_id, now(), label, result, duration_ms),
     )
     conn.commit()
     conn.close()
@@ -236,18 +242,52 @@ def list_queue(limit=50, offset=0):
     return [dict(r) for r in rows]
 
 
-def list_recent_scanned(limit=30, offset=0):
-    """Most recent backlog-scan activity across both sources, newest first -
+# Result-filter buckets for the Log page - matched against the `result`
+# column's own conventions (NULL = clean, "broken: ..."/"skipped: ..."
+# prefixes, anything else = a soft media-info issue joined by "; ").
+RESULT_FILTERS = {
+    "clean": "result IS NULL",
+    "broken": "result LIKE 'broken:%'",
+    "skipped": "result LIKE 'skipped:%'",
+    "issue": "result IS NOT NULL AND result NOT LIKE 'broken:%' AND result NOT LIKE 'skipped:%'",
+}
+
+
+def _scanned_filter_clause(source=None, result=None):
+    clauses, params = [], []
+    if source:
+        clauses.append("source=?")
+        params.append(source)
+    if result and result in RESULT_FILTERS:
+        clauses.append(RESULT_FILTERS[result])
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where, params
+
+
+def list_recent_scanned(limit=30, offset=0, source=None, result=None):
+    """Most recent backlog-scan activity, newest first, optionally filtered
+    by source ('radarr'/'sonarr') and/or result bucket (RESULT_FILTERS) -
     this is what the Log UI page shows so there's visible proof of what the
     worker's actually doing, not just a silent file count."""
+    where, params = _scanned_filter_clause(source, result)
     conn = get_conn()
     rows = conn.execute(
-        "SELECT source, file_id, label, result, scanned_at FROM scanned "
-        "ORDER BY scanned_at DESC LIMIT ? OFFSET ?",
-        (limit, offset),
+        f"SELECT source, file_id, label, result, scanned_at, duration_ms FROM scanned"
+        f"{where} ORDER BY scanned_at DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def count_recent_scanned(source=None, result=None):
+    """Matches list_recent_scanned()'s filtering, for the Log page's
+    pagination total when a filter is active."""
+    where, params = _scanned_filter_clause(source, result)
+    conn = get_conn()
+    row = conn.execute(f"SELECT COUNT(*) AS n FROM scanned{where}", params).fetchone()
+    conn.close()
+    return row["n"]
 
 
 def list_issues(status=None):

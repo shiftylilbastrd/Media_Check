@@ -18,9 +18,31 @@
   </div>
 </div>
 
+<form method="get" style="margin-bottom:16px; display:flex; gap:12px; align-items:center;">
+  <label style="font-size:13px; color:#888;">Source
+    <select name="source" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not source_filter }}>All</option>
+      <option value="radarr" {{ 'selected' if source_filter == 'radarr' }}>Radarr</option>
+      <option value="sonarr" {{ 'selected' if source_filter == 'sonarr' }}>Sonarr</option>
+    </select>
+  </label>
+  <label style="font-size:13px; color:#888;">Result
+    <select name="result" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not result_filter }}>All</option>
+      <option value="clean" {{ 'selected' if result_filter == 'clean' }}>Clean</option>
+      <option value="broken" {{ 'selected' if result_filter == 'broken' }}>Broken</option>
+      <option value="issue" {{ 'selected' if result_filter == 'issue' }}>Soft issue</option>
+      <option value="skipped" {{ 'selected' if result_filter == 'skipped' }}>Skipped</option>
+    </select>
+  </label>
+  {% if source_filter or result_filter %}
+    <a href="{{ url_for('queue_ui.log') }}" style="font-size:13px;">Clear filters</a>
+  {% endif %}
+</form>
+
 {% if recent %}
 <table>
-  <thead><tr><th>Item</th><th>Source</th><th>Result</th><th>Scanned</th></tr></thead>
+  <thead><tr><th>Item</th><th>Source</th><th>Result</th><th>Duration</th><th>Scanned</th></tr></thead>
   <tbody>
   {% for row in recent %}
     <tr>
@@ -37,13 +59,14 @@
           <span class="cat pill-warn">{{ row.result }}</span>
         {% endif %}
       </td>
+      <td style="color:#888; font-size:13px;">{{ row.duration_ms|duration }}</td>
       <td title="{{ row.scanned_at[:16] }}">{{ row.scanned_at|timeago }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
-{{ pager('queue_ui.log', page, per_page, total, per_page_choices) }}
+{{ pager('queue_ui.log', page, per_page, total, per_page_choices, extra_args={'source': source_filter, 'result': result_filter}) }}
 {% else %}
-<div class="empty">Nothing scanned yet.</div>
+<div class="empty">Nothing scanned matches this filter.</div>
 {% endif %}
 {% endblock %}

@@ -1,6 +1,6 @@
-"""Jinja filters, registered in create_app(). Just the one so far:
-human-readable relative timestamps for the Issues/Queue/Log pages, instead
-of a raw ISO string nobody wants to parse in their head."""
+"""Jinja filters, registered in create_app(): human-readable relative
+timestamps and check durations for the Issues/Queue/Log pages, instead of
+raw ISO strings/millisecond counts nobody wants to parse in their head."""
 from datetime import datetime, timezone
 
 
@@ -32,3 +32,17 @@ def timeago(iso_str):
     if days < 7:
         return f"{int(days)}d ago"
     return dt.strftime("%b %d, %Y")
+
+
+def duration(ms):
+    """1500 -> '1.5s', 75000 -> '1m 15s'. None/0 (older rows from before
+    this was tracked, or a check that was skipped rather than actually run)
+    renders as an em dash rather than '0s', which would misleadingly imply
+    an instant check."""
+    if not ms:
+        return "—"
+    seconds = ms / 1000
+    if seconds < 60:
+        return f"{seconds:.1f}s" if seconds < 10 else f"{int(seconds)}s"
+    minutes, seconds = divmod(int(seconds), 60)
+    return f"{minutes}m {seconds}s"

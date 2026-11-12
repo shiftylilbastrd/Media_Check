@@ -42,7 +42,9 @@ def _process_queue_item(item):
     done synchronously in webhooks.py - this is purely the real decode test
     (full broken_reason(deep=True), which also re-verifies the cheap zero-
     fill/format checks in case anything changed since the webhook fired)."""
+    started = time.monotonic()
     bad = detect.broken_reason(item["path"], deep=True) if item["path"] else None
+    duration_ms = int((time.monotonic() - started) * 1000)
     if bad:
         issue_id, acted = actions.auto_replace_broken(
             item["source"], item["ext_id"], item["label"], bad,
@@ -54,7 +56,8 @@ def _process_queue_item(item):
         result = f"broken: {bad}"
     else:
         result = None
-    db.mark_scanned(item["source"], item["file_id"], label=item["label"], result=result)
+    db.mark_scanned(item["source"], item["file_id"], label=item["label"], result=result,
+                     duration_ms=duration_ms)
 
 
 def _refill_radarr():

@@ -1,21 +1,24 @@
-{% macro pager(endpoint, page, per_page, total, per_page_choices) %}
+{% macro pager(endpoint, page, per_page, total, per_page_choices, extra_args={}) %}
 {% set last_page = ((total - 1) // per_page + 1) if total > 0 else 1 %}
 <div class="pager">
   <div class="pages">
     {% if page > 1 %}
-      <a href="{{ url_for(endpoint, page=page-1, per_page=per_page) }}">&larr; Prev</a>
+      <a href="{{ url_for(endpoint, page=page-1, per_page=per_page, **extra_args) }}">&larr; Prev</a>
     {% else %}
       <span style="opacity:.4;">&larr; Prev</span>
     {% endif %}
     <span>Page {{ page }} of {{ last_page }} ({{ total }} total)</span>
     {% if page < last_page %}
-      <a href="{{ url_for(endpoint, page=page+1, per_page=per_page) }}">Next &rarr;</a>
+      <a href="{{ url_for(endpoint, page=page+1, per_page=per_page, **extra_args) }}">Next &rarr;</a>
     {% else %}
       <span style="opacity:.4;">Next &rarr;</span>
     {% endif %}
   </div>
   <form method="get" style="margin:0;">
     <input type="hidden" name="page" value="1">
+    {% for key, value in extra_args.items() %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
     <label style="display:inline; margin:0 6px 0 0; color:#98a1b0; font-size:13px;">Per page</label>
     <select name="per_page" onchange="this.form.submit()">
       {% for choice in per_page_choices %}

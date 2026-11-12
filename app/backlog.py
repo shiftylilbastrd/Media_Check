@@ -14,6 +14,7 @@ has looked at, success or failure, so the worker always picks up where the
 last one left off until the whole library has been covered - then there's
 simply nothing left to return until new items age into Radarr/Sonarr's own
 "has file" state outside the normal import path (e.g. a manual import)."""
+import time
 import traceback
 
 import requests
@@ -70,6 +71,7 @@ def check_one(source, *, ext_id, label, file_id, path, media_info, size,
     deep=True: a real ffmpeg decode test, not just the cheap zero-fill/format
     check - this file predates the app, so (unlike a queued new import) it's
     never been decode-tested before now."""
+    started = time.monotonic()
     bad = detect.broken_reason(path, deep=True) if path else None
     if bad:
         issue_id, acted = actions.auto_replace_broken(
@@ -94,7 +96,8 @@ def check_one(source, *, ext_id, label, file_id, path, media_info, size,
             body = "\n".join(f"- {reason}" for _, reason in new_problems)
             notify.send(f"media-check (backlog): {label}", body)
         result = "; ".join(reason for _, reason in problems) if problems else None
-    db.mark_scanned(source, file_id, label=label, result=result)
+    duration_ms = int((time.monotonic() - started) * 1000)
+    db.mark_scanned(source, file_id, label=label, result=result, duration_ms=duration_ms)
 
 
 def _radarr_candidates(already_scanned, limit):
@@ -145,7 +148,7 @@ def next_radarr_candidates(limit):
     scanned = db.get_scanned_ids("radarr")
     out = []
     for movie, mf in _radarr_candidates(scanned, limit):
-        label = f"Movie: {movie.get('title')} ({movie.get('year')})"
+        label = f"{movie.get('title')} ({movie.get('year')})"
         out.append({
             "source": "radarr", "ext_id": movie.get("id"), "label": label,
             "file_id": mf.get("id"), "path": mf.get("path"),
@@ -164,7 +167,7 @@ def next_sonarr_candidates(limit):
     out = []
     for series, ep, file_id in _sonarr_candidates(scanned, limit):
         label = (
-            f"TV: {series.get('title')} "
+            f"{series.get('title')} "
             f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
         )
         try:

@@ -44,7 +44,7 @@ def radarr_webhook():
         movie = payload.get("movie", {})
         mf = payload.get("movieFile", {})
         media_info = mf.get("mediaInfo") or {}
-        label = f"Movie: {movie.get('title')} ({movie.get('year')})"
+        label = f"{movie.get('title')} ({movie.get('year')})"
         host_path = mf.get("path") or movie.get("folderPath")
 
         bad = detect.broken_reason(host_path) if host_path else None
@@ -104,7 +104,7 @@ def sonarr_webhook():
         ep = episodes[0] if episodes else {}
         is_anime = series.get("seriesType") == "anime"
         label = (
-            f"TV: {series.get('title')} "
+            f"{series.get('title')} "
             f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
         )
         host_path = ef.get("path")

@@ -42,7 +42,7 @@ def _reconcile_radarr():
             movie = arr_client.request_json("radarr", "GET", f"/api/v3/movie/{rec['movieId']}")
             if not movie:
                 continue
-            label = f"Movie: {movie.get('title')} ({movie.get('year')})"
+            label = f"{movie.get('title')} ({movie.get('year')})"
             db.enqueue(
                 "radarr", file_id, label,
                 ext_id=movie.get("id"), download_id=rec.get("downloadId"), path=mf.get("path"),
@@ -84,7 +84,7 @@ def _reconcile_sonarr():
             if not ep or not series:
                 continue
             label = (
-                f"TV: {series.get('title')} "
+                f"{series.get('title')} "
                 f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
             )
             db.enqueue(

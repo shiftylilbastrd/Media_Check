@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post">
+  {% for key, display_name, placeholder, is_secret in fields %}
+    <label for="{{ key }}">{{ display_name }}</label>
+    <input type="{{ 'password' if is_secret else 'text' }}"
+           id="{{ key }}" name="{{ key }}" value="{{ values[key] }}"
+           placeholder="{{ placeholder }}" autocomplete="off">
+  {% endfor %}
+  <p style="margin-top:20px;"><button type="submit" class="fix">Save</button></p>
+</form>
+{% endblock %}

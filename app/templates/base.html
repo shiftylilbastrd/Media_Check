@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}media-check-tools{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: dark; }
+    body { background:#11161d; color:#e6e9ee; font-family:-apple-system,"Segoe UI",sans-serif; margin:0; }
+    header { background:#1a2029; padding:14px 24px; display:flex; justify-content:space-between;
+              align-items:center; border-bottom:1px solid #2b3340; }
+    header a.brand { color:#e6e9ee; text-decoration:none; font-weight:700; }
+    header nav a { margin-left:18px; color:#98a1b0; text-decoration:none; font-weight:500; }
+    header nav a.active { color:#f07a35; }
+    main { max-width:960px; margin:24px auto; padding:0 20px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #2b3340; vertical-align:top; }
+    th { color:#98a1b0; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+    .label { font-weight:600; }
+    .reason { color:#98a1b0; font-size:14px; margin-top:2px; }
+    .cat { display:inline-block; font-size:11px; padding:2px 6px; border-radius:4px;
+           background:#222a35; color:#98a1b0; margin-top:6px; }
+    form.inline { display:inline; margin-right:6px; }
+    button { background:#2b3340; color:#e6e9ee; border:1px solid #3a4454; border-radius:6px;
+              padding:6px 12px; cursor:pointer; font-size:13px; }
+    button.ignore:hover { background:#3a4454; }
+    button.fix { background:#f07a35; color:#1a1206; border-color:#f07a35; font-weight:600; }
+    button.fix:hover { opacity:.9; }
+    .filters { margin-bottom:16px; }
+    .filters a { margin-right:14px; color:#98a1b0; text-decoration:none; }
+    .filters a.active { color:#f07a35; font-weight:600; }
+    .flash { background:#222a35; border:1px solid #3a4454; padding:10px 14px; border-radius:6px;
+              margin-bottom:16px; }
+    label { display:block; margin:14px 0 4px; font-size:13px; color:#98a1b0; }
+    input[type=text], input[type=password] { width:100%; box-sizing:border-box; padding:8px 10px;
+              background:#11161d; border:1px solid #2b3340; border-radius:6px; color:#e6e9ee; }
+    .empty { color:#98a1b0; padding:60px 0; text-align:center; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="{{ url_for('issues.index') }}">media-check-tools</a>
+    <nav>
+      <a href="{{ url_for('issues.index') }}"
+         class="{{ 'active' if request.endpoint == 'issues.index' else '' }}">Issues</a>
+      <a href="{{ url_for('settings.edit') }}"
+         class="{{ 'active' if request.endpoint == 'settings.edit' else '' }}">Settings</a>
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}{% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}{% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

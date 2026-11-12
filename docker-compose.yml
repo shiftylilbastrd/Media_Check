@@ -1,0 +1,16 @@
+services:
+  media-check-tools:
+    build: .
+    container_name: media-check-tools
+    restart: unless-stopped
+    ports:
+      - "8585:8585"
+    volumes:
+      # Durable state (SQLite db + raw webhook debug log) - survives rebuilds.
+      - /mnt/user/appdata/media-check-tools:/data
+      # Read-write: needed to decode-test files and to delete confirmed-broken
+      # ones before Radarr/Sonarr re-search. Same access level the old
+      # "Media-Check-Tools" container needed.
+      - /mnt/user:/mnt/user
+    environment:
+      - TZ=America/Los_Angeles

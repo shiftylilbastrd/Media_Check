@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="filters">
+  <a href="{{ url_for('issues.index', status='open') }}"
+     class="{{ 'active' if status_filter == 'open' else '' }}">Open</a>
+  <a href="{{ url_for('issues.index', status='ignored') }}"
+     class="{{ 'active' if status_filter == 'ignored' else '' }}">Ignored</a>
+  <a href="{{ url_for('issues.index', status='all') }}"
+     class="{{ 'active' if status_filter == 'all' else '' }}">All</a>
+</div>
+{% if issues %}
+<table>
+  <thead><tr><th>Item</th><th>Status</th><th>Detected</th><th></th></tr></thead>
+  <tbody>
+  {% for issue in issues %}
+    <tr>
+      <td>
+        <div class="label">{{ issue.label }}</div>
+        <div class="reason">{{ issue.reason }}</div>
+        <span class="cat">{{ issue.category }}</span>
+      </td>
+      <td>{{ issue.status }}</td>
+      <td>{{ issue.detected_at[:16] }}</td>
+      <td>
+        {% if issue.status == 'open' %}
+        <form class="inline" method="post"
+              action="{{ url_for('issues.ignore', issue_id=issue.id, status=status_filter) }}">
+          <button class="ignore" type="submit">Ignore</button>
+        </form>
+        <form class="inline" method="post"
+              action="{{ url_for('issues.fix', issue_id=issue.id, status=status_filter) }}">
+          <button class="fix" type="submit">Fix now</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">No {{ status_filter }} issues right now.</div>
+{% endif %}
+{% endblock %}

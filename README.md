@@ -14,15 +14,27 @@ Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
 - **Backlog scanner**: separately works through the rest of the library -
   everything Radarr/Sonarr already had before this app existed, which the
   webhook and daily-poll paths above never see (they only look at new/recent
-  imports). Throttled: a configurable number of never-before-checked files
-  per pass, on a configurable interval (both in Settings, default 20 files /
-  24h), so it doesn't hammer disk or ffmpeg scanning the whole library at
-  once. Every file it looks at is marked scanned (whether or not a problem
-  was found) so it's never picked again - each pass just continues where the
-  last one left off until the whole library's been covered.
+  imports). This is specifically what runs the real ffmpeg decode test (see
+  below) against that pre-existing library - a file can look fine by
+  container/format alone and still fail partway through actual playback, and
+  that's what this scan exists to catch. Throttled: a configurable number of
+  never-before-checked files per pass, on a configurable interval (both in
+  Settings, default 20 files / 24h), so it doesn't hammer disk or ffmpeg
+  scanning the whole library at once. Every file it looks at is marked
+  scanned (whether or not a problem was found) so it's never picked again -
+  each pass just continues where the last one left off until the whole
+  library's been covered.
 - Flags problem imports: missing/foreign audio, Dolby Vision without an
-  HDR10 fallback, short/truncated runtime, suspiciously small files, decode
-  errors, broken/zero-filled downloads.
+  HDR10 fallback, short/truncated runtime, suspiciously small files, broken/
+  zero-filled downloads, and decode errors.
+  - The decode check is a real ffmpeg decode over the first 5 minutes of the
+    file - catches corruption a format check alone misses (a readable
+    container that still errors out partway through actual playback).
+    It's CPU/disk-intensive (can take real minutes on a large file under a
+    busy array), so it only runs on the backlog scanner and the daily-poll
+    fallback - both background threads with nothing waiting on them. The
+    live webhook path (the one Radarr/Sonarr are waiting on for an HTTP
+    response) stays shallow/fast on purpose and skips it.
 - Bundles its own ffmpeg/ffprobe — no separate persistent "tools" container,
   no `docker exec` into anything else.
 - **Broken/zero-filled files are still fully automatic**: delete the file

@@ -8,9 +8,15 @@ services:
     volumes:
       # Durable state (SQLite db + raw webhook debug log) - survives rebuilds.
       - /mnt/user/appdata/media-check-tools:/data
-      # Read-write: needed to decode-test files and to delete confirmed-broken
-      # ones before Radarr/Sonarr re-search. Same access level the old
-      # "Media-Check-Tools" container needed.
-      - /mnt/user:/mnt/user
+      # Mirrors Radarr/Sonarr's own container paths exactly (NOT the host
+      # layout) - the `path` field in their webhooks/API is literally the
+      # path as Radarr/Sonarr see it inside their own containers, and this
+      # app takes it as-is with no remapping. Read-write: needed to
+      # decode-test files and to delete confirmed-broken ones before
+      # Radarr/Sonarr re-search. Match these three to whatever Radarr/Sonarr's
+      # own Path mappings actually are - update if those ever change.
+      - /mnt/user/anime:/anime
+      - /mnt/user/tv:/tv
+      - /mnt/user/movies:/movies
     environment:
       - TZ=America/Los_Angeles

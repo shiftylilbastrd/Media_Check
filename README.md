@@ -91,8 +91,17 @@ Community App:
 - **Repository**: `ghcr.io/shiftylilbastrd/media-check-tools:latest`
 - **Port**: `8585:8585`
 - **Path**: `/mnt/user/appdata/media-check-tools` → `/data`
-- **Path**: `/mnt/user` → `/mnt/user` (read/write - needed for decode-test
-  reads and deleting confirmed-broken files)
+- **Path**: `/mnt/user/anime` → `/anime` (read/write)
+- **Path**: `/mnt/user/tv` → `/tv` (read/write)
+- **Path**: `/mnt/user/movies` → `/movies` (read/write)
+
+The three library paths must be container paths that match **Radarr/Sonarr's
+own container paths exactly** (not the host layout) - the `path` field in
+their webhooks/API is literally the path as Radarr/Sonarr see it inside
+their own containers, and this app uses it as-is with no remapping. If
+Radarr/Sonarr's own Path mappings ever change, update these to match.
+Read/write is needed to decode-test files and to delete confirmed-broken
+ones before Radarr/Sonarr re-search.
 
 No state worth keeping lives in the image - only in the mounted SQLite file
 (and the raw webhook debug log) under `/data`. A docker-folder wipe is just

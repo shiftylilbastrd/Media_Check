@@ -4,8 +4,9 @@ Ported 1:1 (no behavior changes):
   - no/missing audio track
   - missing English audio (foreign-only)
   - Dolby Vision without an HDR10 fallback
-  - runtime far short of the listed runtime (possibly truncated/wrong release)
-  - suspiciously small file size for its runtime
+  - runtime far short of the listed runtime (possibly truncated/wrong release) -
+    NOTE: inactive on Ryan's Radarr/Sonarr version, see check_media_info()
+  - suspiciously small file size for its runtime - same caveat as above
   - broken/zero-filled file detection (head-of-file zero check + ffprobe)
   - ffmpeg decode test over the first N seconds
 
@@ -44,25 +45,42 @@ def runtime_minutes_from_arr_string(rt):
     return h * 60 + m + (1 if s >= 30 else 0)
 
 
+def _normalize_langs(raw):
+    """Radarr/Sonarr webhooks have been observed sending audioLanguages as a
+    list (e.g. ["eng"]) on current versions. Tolerate an older/different
+    version that sends a slash-delimited string instead, rather than assume
+    either shape and crash on the other."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [p.strip().lower() for p in raw.split("/") if p.strip()]
+    return [str(p).strip().lower() for p in raw if str(p).strip()]
+
+
 def check_media_info(media_info, size_bytes, listed_runtime_min, expect_languages):
     """Mirrors the old bash check_file(). Returns a list of (category, reason).
-    expect_languages: e.g. ["eng"] or ["eng", "jpn"] for anime."""
+    expect_languages: e.g. ["eng"] or ["eng", "jpn"] for anime.
+
+    audioStreamCount and runTime are NOT assumed present - a real webhook
+    payload from Ryan's Radarr showed neither field in mediaInfo at all (only
+    audioChannels/audioCodec/audioLanguages/video*). "Has audio" is judged
+    from audioCodec being present instead; the runtime/small_size checks
+    below simply don't fire when runTime is absent, same as before, rather
+    than crash or guess."""
     problems = []
-    audio_streams = media_info.get("audioStreamCount", 0) or 0
     codec = media_info.get("audioCodec") or ""
-    langs = (media_info.get("audioLanguages") or "").lower()
+    langs = _normalize_langs(media_info.get("audioLanguages"))
     dyn_range = media_info.get("videoDynamicRangeType") or ""
     actual_runtime = runtime_minutes_from_arr_string(media_info.get("runTime"))
 
-    if audio_streams == 0 or not codec:
+    if not codec:
         problems.append(("no_audio", "no audio track"))
-
-    if langs and audio_streams:
-        have_expected = any(f"/{lang}/" in f"/{langs}/" for lang in expect_languages)
+    elif langs:
+        have_expected = any(lang in langs for lang in expect_languages)
         if not have_expected and "und" not in langs:
             problems.append((
                 "no_english_audio",
-                f"no English audio (has: {langs}) - foreign-language only, "
+                f"no English audio (has: {'/'.join(langs)}) - foreign-language only, "
                 f"needs a dual-audio release",
             ))
 

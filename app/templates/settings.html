@@ -1,12 +1,57 @@
 {% extends "base.html" %}
 {% block content %}
 <form method="post">
-  {% for key, display_name, placeholder, is_secret in fields %}
-    <label for="{{ key }}">{{ display_name }}</label>
-    <input type="{{ 'password' if is_secret else 'text' }}"
-           id="{{ key }}" name="{{ key }}" value="{{ values[key] }}"
-           placeholder="{{ placeholder }}" autocomplete="off">
+  {% for title, fields, test_service in sections %}
+    <fieldset class="settings-section">
+      <legend>{{ title }}</legend>
+      {% for key, display_name, placeholder, is_secret in fields %}
+        <label for="{{ key }}">{{ display_name }}</label>
+        <input type="{{ 'password' if is_secret else 'text' }}"
+               id="{{ key }}" name="{{ key }}" value="{{ values[key] }}"
+               placeholder="{{ placeholder }}" autocomplete="off">
+      {% endfor %}
+      {% if test_service %}
+        <p class="test-row">
+          <button type="button" class="test-btn" data-service="{{ test_service }}"
+                  data-fields="{{ test_fields[test_service]|tojson|forceescape }}">Test</button>
+          <span class="test-result" id="test-result-{{ test_service }}"></span>
+        </p>
+      {% endif %}
+    </fieldset>
   {% endfor %}
   <p style="margin-top:20px;"><button type="submit" class="fix">Save</button></p>
 </form>
+
+<script>
+document.querySelectorAll('.test-btn').forEach(function (btn) {
+  btn.addEventListener('click', async function () {
+    var service = btn.dataset.service;
+    var fieldMap = JSON.parse(btn.dataset.fields);  // {"url": "radarr_url", ...}
+    var payload = {};
+    Object.keys(fieldMap).forEach(function (paramName) {
+      var el = document.getElementById(fieldMap[paramName]);
+      payload[paramName] = el ? el.value : '';
+    });
+    var resultEl = document.getElementById('test-result-' + service);
+    resultEl.textContent = 'Testing…';
+    resultEl.className = 'test-result';
+    btn.disabled = true;
+    try {
+      var resp = await fetch('/settings/test/' + service, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      var data = await resp.json();
+      resultEl.textContent = data.message;
+      resultEl.className = 'test-result ' + (data.ok ? 'ok' : 'fail');
+    } catch (e) {
+      resultEl.textContent = 'Request failed: ' + e;
+      resultEl.className = 'test-result fail';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+});
+</script>
 {% endblock %}

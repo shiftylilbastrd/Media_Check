@@ -13,10 +13,12 @@ def create_app():
     from .webhooks import bp as webhooks_bp
     from .issues_routes import bp as issues_bp
     from .settings_routes import bp as settings_bp
+    from .backlog_routes import bp as backlog_bp
 
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(issues_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(backlog_bp)
 
     from .scheduler import start_scheduler
     start_scheduler()

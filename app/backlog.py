@@ -28,19 +28,37 @@ DEFAULT_INTERVAL_HOURS = 24
 MIN_INTERVAL_HOURS = 1  # safety floor - a 0 or negative setting would busy-loop
 
 
-def _batch_size():
+def batch_size():
     try:
         return max(1, int(db.get_setting("backlog_scan_batch_size", DEFAULT_BATCH_SIZE)))
     except (TypeError, ValueError):
         return DEFAULT_BATCH_SIZE
 
 
-def _interval_seconds():
+def interval_hours():
     try:
         hours = float(db.get_setting("backlog_scan_interval_hours", DEFAULT_INTERVAL_HOURS))
     except (TypeError, ValueError):
         hours = DEFAULT_INTERVAL_HOURS
-    return max(MIN_INTERVAL_HOURS, hours) * 3600
+    return max(MIN_INTERVAL_HOURS, hours)
+
+
+def interval_seconds():
+    return interval_hours() * 3600
+
+
+def radarr_total():
+    """Cheap total: one /api/v3/movie call, just counts hasFile - no per-file
+    lookups. Used by the Backlog UI page for a scanned/total progress figure."""
+    movies = arr_client.request_json("radarr", "GET", "/api/v3/movie") or []
+    return sum(1 for m in movies if m.get("hasFile"))
+
+
+def sonarr_total():
+    """Cheap total: one /api/v3/series call, summed episodeFileCount from each
+    series' own statistics - no per-series episode walk needed just to count."""
+    series_list = arr_client.request_json("sonarr", "GET", "/api/v3/series") or []
+    return sum((s.get("statistics") or {}).get("episodeFileCount", 0) for s in series_list)
 
 
 def _check_one(source, *, ext_id, label, file_id, path, media_info, size,
@@ -62,6 +80,7 @@ def _check_one(source, *, ext_id, label, file_id, path, media_info, size,
         )
         if acted:
             notify.send(f"media-check-tools (backlog): {label}", db.get_issue(issue_id)["reason"])
+        result = f"broken: {bad}"
     else:
         problems = detect.check_media_info(media_info, size, listed_runtime, expect_languages)
         new_problems = [
@@ -76,7 +95,8 @@ def _check_one(source, *, ext_id, label, file_id, path, media_info, size,
         if new_problems:
             body = "\n".join(f"- {reason}" for _, reason in new_problems)
             notify.send(f"media-check-tools (backlog): {label}", body)
-    db.mark_scanned(source, file_id)
+        result = "; ".join(reason for _, reason in problems) if problems else None
+    db.mark_scanned(source, file_id, label=label, result=result)
 
 
 def _radarr_candidates(already_scanned, limit):
@@ -142,13 +162,17 @@ def _scan_sonarr(limit):
     scanned = db.get_scanned_ids("sonarr")
     candidates = _sonarr_candidates(scanned, limit)
     for series, ep, file_id in candidates:
+        label = (
+            f"TV: {series.get('title')} "
+            f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
+        )
         try:
             ef = arr_client.request_json("sonarr", "GET", f"/api/v3/episodefile/{file_id}")
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 # file got deleted/replaced between listing episodes and looking
                 # this one up - nothing left to check, and no point retrying it
-                db.mark_scanned("sonarr", file_id)
+                db.mark_scanned("sonarr", file_id, label=label, result="skipped: file no longer exists")
                 continue
             print(f"[backlog] sonarr file {file_id} lookup failed:\n"
                   f"{traceback.format_exc()}", flush=True)
@@ -159,13 +183,10 @@ def _scan_sonarr(limit):
                   f"{traceback.format_exc()}", flush=True)
             continue
         if not ef:
-            db.mark_scanned("sonarr", file_id)  # file record gone - nothing to check, don't retry
+            # file record gone - nothing to check, don't retry
+            db.mark_scanned("sonarr", file_id, label=label, result="skipped: file record gone")
             continue
         is_anime = series.get("seriesType") == "anime"
-        label = (
-            f"TV: {series.get('title')} "
-            f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
-        )
         try:
             _check_one(
                 "sonarr", ext_id=series.get("id"), label=label,
@@ -184,7 +205,7 @@ def run_backlog_scan_once():
     """One throttled pass. Radarr gets the full budget first, Sonarr gets
     whatever's left - simple and predictable, not an attempt at perfect
     fairness between the two libraries."""
-    budget = _batch_size()
+    budget = batch_size()
     done = 0
     try:
         done += _scan_radarr(budget)
@@ -212,6 +233,6 @@ def start_backlog_scanner():
                 run_backlog_scan_once()
             except Exception:
                 print(f"[backlog] pass failed:\n{traceback.format_exc()}", flush=True)
-            time.sleep(_interval_seconds())
+            time.sleep(interval_seconds())
 
     threading.Thread(target=loop, daemon=True).start()

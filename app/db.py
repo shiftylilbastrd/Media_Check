@@ -39,6 +39,14 @@ def init_db():
         )
         """
     )
+    # label/result added later - an existing DB's `scanned` table predates them,
+    # and CREATE TABLE IF NOT EXISTS above won't add columns to it. Add them if
+    # missing so upgrading doesn't require wiping the table.
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(scanned)")}
+    if "label" not in existing_cols:
+        conn.execute("ALTER TABLE scanned ADD COLUMN label TEXT")
+    if "result" not in existing_cols:
+        conn.execute("ALTER TABLE scanned ADD COLUMN result TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS issues (
@@ -133,13 +141,23 @@ def get_scanned_ids(source):
     return {r["file_id"] for r in rows}
 
 
-def mark_scanned(source, file_id):
+def mark_scanned(source, file_id, label=None, result=None):
     """Record that this file has been checked at least once - regardless of
-    whether a problem was found - so the backlog scanner never re-picks it."""
+    whether a problem was found - so the backlog scanner never re-picks it.
+
+    label/result are purely for the Backlog UI page (what got checked, and
+    what came of it - None/empty result means "looked clean"). They don't
+    affect scan-skip logic at all, which is keyed on (source, file_id) alone.
+    ON CONFLICT updates rather than no-ops, so a second mark_scanned() call
+    for the same file (shouldn't normally happen, since it's only ever
+    called once a file's skipped afterward) still refreshes the display
+    instead of silently doing nothing."""
     conn = get_conn()
     conn.execute(
-        "INSERT OR IGNORE INTO scanned (source, file_id, scanned_at) VALUES (?, ?, ?)",
-        (source, file_id, now()),
+        "INSERT INTO scanned (source, file_id, scanned_at, label, result) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(source, file_id) DO UPDATE SET "
+        "scanned_at=excluded.scanned_at, label=excluded.label, result=excluded.result",
+        (source, file_id, now(), label, result),
     )
     conn.commit()
     conn.close()
@@ -150,6 +168,20 @@ def count_scanned(source):
     row = conn.execute("SELECT COUNT(*) AS n FROM scanned WHERE source=?", (source,)).fetchone()
     conn.close()
     return row["n"]
+
+
+def list_recent_scanned(limit=30):
+    """Most recent backlog-scan activity across both sources, newest first -
+    this is what the Backlog UI page shows so there's visible proof of what
+    the scanner's actually doing, not just a silent file count."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT source, file_id, label, result, scanned_at FROM scanned "
+        "ORDER BY scanned_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def list_issues(status=None):

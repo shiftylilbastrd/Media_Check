@@ -14,6 +14,8 @@ FIELDS = [
     ("plex_token", "Plex Token", "", True),
     ("pushover_token", "Pushover Application Token", "", True),
     ("pushover_user_key", "Pushover User Key", "", True),
+    ("backlog_scan_batch_size", "Backlog scan: files per pass", "20", False),
+    ("backlog_scan_interval_hours", "Backlog scan: hours between passes", "24", False),
 ]
 
 

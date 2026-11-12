@@ -11,6 +11,15 @@ Self-contained media-import issue tracker for Athena (Unraid). Replaces the old
 - **Fallback: a once-a-day poll** of the last ~26h of import history, purely
   as a safety net for a missed webhook delivery (arr restart, network blip,
   this app being down at that moment). Not the primary mechanism anymore.
+- **Backlog scanner**: separately works through the rest of the library -
+  everything Radarr/Sonarr already had before this app existed, which the
+  webhook and daily-poll paths above never see (they only look at new/recent
+  imports). Throttled: a configurable number of never-before-checked files
+  per pass, on a configurable interval (both in Settings, default 20 files /
+  24h), so it doesn't hammer disk or ffmpeg scanning the whole library at
+  once. Every file it looks at is marked scanned (whether or not a problem
+  was found) so it's never picked again - each pass just continues where the
+  last one left off until the whole library's been covered.
 - Flags problem imports: missing/foreign audio, Dolby Vision without an
   HDR10 fallback, short/truncated runtime, suspiciously small files, decode
   errors, broken/zero-filled downloads.

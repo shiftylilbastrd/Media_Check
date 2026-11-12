@@ -31,6 +31,16 @@ def init_db():
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS scanned (
+            source TEXT NOT NULL,
+            file_id INTEGER NOT NULL,
+            scanned_at TEXT NOT NULL,
+            PRIMARY KEY (source, file_id)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS issues (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source TEXT NOT NULL,          -- 'radarr' or 'sonarr'
@@ -111,6 +121,35 @@ def record_issue(
     issue_id = cur.lastrowid
     conn.close()
     return issue_id
+
+
+def get_scanned_ids(source):
+    """All file_ids already scanned (ever, regardless of outcome) for a
+    source - pulled once per backlog run and checked in-memory, rather than
+    one query per candidate file."""
+    conn = get_conn()
+    rows = conn.execute("SELECT file_id FROM scanned WHERE source=?", (source,)).fetchall()
+    conn.close()
+    return {r["file_id"] for r in rows}
+
+
+def mark_scanned(source, file_id):
+    """Record that this file has been checked at least once - regardless of
+    whether a problem was found - so the backlog scanner never re-picks it."""
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO scanned (source, file_id, scanned_at) VALUES (?, ?, ?)",
+        (source, file_id, now()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def count_scanned(source):
+    conn = get_conn()
+    row = conn.execute("SELECT COUNT(*) AS n FROM scanned WHERE source=?", (source,)).fetchone()
+    conn.close()
+    return row["n"]
 
 
 def list_issues(status=None):

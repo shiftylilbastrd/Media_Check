@@ -21,4 +21,7 @@ def create_app():
     from .scheduler import start_scheduler
     start_scheduler()
 
+    from .backlog import start_backlog_scanner
+    start_backlog_scanner()
+
     return app

@@ -74,6 +74,17 @@ def radarr_webhook():
             if new_problems:
                 body = "\n".join(f"- {reason}" for _, reason in new_problems)
                 notify.send(f"media-check-tools: {label}", body)
+            # Passed the fast shallow check - queue it for the real ffmpeg
+            # decode test, which is too slow to run inline on this live HTTP
+            # response. The worker thread picks new queue items up ahead of
+            # backlog work, so this gets decode-tested soon, not whenever the
+            # next poll happens to run.
+            if host_path:
+                db.enqueue(
+                    "radarr", mf.get("id"), label,
+                    ext_id=movie.get("id"), download_id=payload.get("downloadId"),
+                    path=host_path,
+                )
     except Exception:
         _log_raw("radarr-parse-error", {"traceback": traceback.format_exc()})
     return jsonify(ok=True), 200
@@ -125,6 +136,14 @@ def sonarr_webhook():
             if new_problems:
                 body = "\n".join(f"- {reason}" for _, reason in new_problems)
                 notify.send(f"media-check-tools: {label}", body)
+            # See radarr_webhook() - queue for the real decode test instead
+            # of running it inline on this live HTTP response.
+            if host_path:
+                db.enqueue(
+                    "sonarr", ef.get("id"), label,
+                    ext_id=series.get("id"), episode_id=ep.get("id"),
+                    download_id=payload.get("downloadId"), path=host_path,
+                )
     except Exception:
         _log_raw("sonarr-parse-error", {"traceback": traceback.format_exc()})
     return jsonify(ok=True), 200

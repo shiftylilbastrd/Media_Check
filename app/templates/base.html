@@ -51,8 +51,10 @@
     <nav>
       <a href="{{ url_for('issues.index') }}"
          class="{{ 'active' if request.endpoint == 'issues.index' else '' }}">Issues</a>
-      <a href="{{ url_for('backlog_ui.index') }}"
-         class="{{ 'active' if request.endpoint == 'backlog_ui.index' else '' }}">Backlog</a>
+      <a href="{{ url_for('queue_ui.index') }}"
+         class="{{ 'active' if request.endpoint == 'queue_ui.index' else '' }}">Queue</a>
+      <a href="{{ url_for('queue_ui.log') }}"
+         class="{{ 'active' if request.endpoint == 'queue_ui.log' else '' }}">Log</a>
       <a href="{{ url_for('settings.edit') }}"
          class="{{ 'active' if request.endpoint == 'settings.edit' else '' }}">Settings</a>
     </nav>

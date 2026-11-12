@@ -1,18 +1,19 @@
-"""Backlog scanner: works through the library Radarr/Sonarr already has
-imported - most of which predates this app and was never checked by the
-webhook or daily-poll paths (those only see *new* imports/recent history) -
-at a throttled rate so it doesn't hammer the disk or ffmpeg all at once.
+"""Backlog candidate discovery + the "check one old library item" routine,
+used by worker.py to fill idle time between queued (newly-imported) files
+with items Radarr/Sonarr already had before this app existed - most of which
+were never checked by the webhook or reconciliation paths (those only see
+*new*/recent imports).
+
+There's no batch/interval throttle anymore - worker.py just keeps asking for
+the next backlog candidate whenever the new-item queue is empty, and relies
+on nice/ionice (see detect.py's decode_test()) to keep that from starving
+other services, rather than a manual schedule.
 
 A file is only ever picked once: `scanned` records every file_id this app
-has looked at, success or failure, so each run picks up where the last one
-left off until the whole library has been covered - then it just idles
-(nothing left unscanned) until new library items age into Radarr/Sonarr's
-own "has file" state outside the normal import path (e.g. a manual import).
-
-Batch size and interval are both configurable from Settings - "per day" was
-the starting idea, but there's no reason to hardcode the period."""
-import threading
-import time
+has looked at, success or failure, so the worker always picks up where the
+last one left off until the whole library has been covered - then there's
+simply nothing left to return until new items age into Radarr/Sonarr's own
+"has file" state outside the normal import path (e.g. a manual import)."""
 import traceback
 
 import requests
@@ -23,33 +24,10 @@ from . import db
 from . import detect
 from . import notify
 
-DEFAULT_BATCH_SIZE = 20
-DEFAULT_INTERVAL_HOURS = 24
-MIN_INTERVAL_HOURS = 1  # safety floor - a 0 or negative setting would busy-loop
-
-
-def batch_size():
-    try:
-        return max(1, int(db.get_setting("backlog_scan_batch_size", DEFAULT_BATCH_SIZE)))
-    except (TypeError, ValueError):
-        return DEFAULT_BATCH_SIZE
-
-
-def interval_hours():
-    try:
-        hours = float(db.get_setting("backlog_scan_interval_hours", DEFAULT_INTERVAL_HOURS))
-    except (TypeError, ValueError):
-        hours = DEFAULT_INTERVAL_HOURS
-    return max(MIN_INTERVAL_HOURS, hours)
-
-
-def interval_seconds():
-    return interval_hours() * 3600
-
 
 def radarr_total():
     """Cheap total: one /api/v3/movie call, just counts hasFile - no per-file
-    lookups. Used by the Backlog UI page for a scanned/total progress figure."""
+    lookups. Used by the Queue/Completion-log UI for a scanned/total figure."""
     movies = arr_client.request_json("radarr", "GET", "/api/v3/movie") or []
     return sum(1 for m in movies if m.get("hasFile"))
 
@@ -61,17 +39,16 @@ def sonarr_total():
     return sum((s.get("statistics") or {}).get("episodeFileCount", 0) for s in series_list)
 
 
-def _check_one(source, *, ext_id, label, file_id, path, media_info, size,
-                listed_runtime, expect_languages, episode_id=None, download_id=None):
-    """Same dispatch order as webhooks.py/scheduler.py: broken-file check
-    first (fully automatic, no button), otherwise the softer media-info
-    checks (Ignore/Fix-now UI). Always marks the file scanned afterward,
-    whatever the outcome, so it's never picked again.
+def check_one(source, *, ext_id, label, file_id, path, media_info, size,
+              listed_runtime, expect_languages, episode_id=None, download_id=None):
+    """Same dispatch order as webhooks.py: broken-file check first (fully
+    automatic, no button), otherwise the softer media-info checks
+    (Ignore/Fix-now UI). Always marks the file scanned afterward, whatever
+    the outcome, so it's never picked again.
 
-    deep=True: this is specifically what the backlog scanner is for - a real
-    ffmpeg decode test against the library that predates this app, not just
-    the cheap zero-fill/format check. Runs on its own background thread, so
-    the per-file cost (seconds of real decode time) doesn't block anything."""
+    deep=True: a real ffmpeg decode test, not just the cheap zero-fill/format
+    check - this file predates the app, so (unlike a queued new import) it's
+    never been decode-tested before now."""
     bad = detect.broken_reason(path, deep=True) if path else None
     if bad:
         issue_id, acted = actions.auto_replace_broken(
@@ -139,29 +116,32 @@ def _sonarr_candidates(already_scanned, limit):
     return out
 
 
-def _scan_radarr(limit):
+def next_radarr_candidates(limit):
+    """Up to `limit` unscanned Radarr movies, as (label, kwargs-for-check_one)
+    pairs - worker.py prefetches a small batch at a time rather than calling
+    this once per file, so it isn't re-listing Radarr's whole library on
+    every single backlog item."""
     scanned = db.get_scanned_ids("radarr")
-    candidates = _radarr_candidates(scanned, limit)
-    for movie, mf in candidates:
+    out = []
+    for movie, mf in _radarr_candidates(scanned, limit):
         label = f"Movie: {movie.get('title')} ({movie.get('year')})"
-        try:
-            _check_one(
-                "radarr", ext_id=movie.get("id"), label=label,
-                file_id=mf.get("id"), path=mf.get("path"),
-                media_info=mf.get("mediaInfo") or {}, size=mf.get("size", 0),
-                listed_runtime=movie.get("runtime", 0), expect_languages=["eng"],
-            )
-        except Exception:
-            # one bad file should never stop the rest of this pass
-            print(f"[backlog] radarr file {mf.get('id')} check failed:\n"
-                  f"{traceback.format_exc()}", flush=True)
-    return len(candidates)
+        out.append({
+            "source": "radarr", "ext_id": movie.get("id"), "label": label,
+            "file_id": mf.get("id"), "path": mf.get("path"),
+            "media_info": mf.get("mediaInfo") or {}, "size": mf.get("size", 0),
+            "listed_runtime": movie.get("runtime", 0), "expect_languages": ["eng"],
+        })
+    return out
 
 
-def _scan_sonarr(limit):
+def next_sonarr_candidates(limit):
+    """Up to `limit` unscanned Sonarr episodes. Unlike Radarr, each candidate
+    needs one more lookup (the episodefile itself) to get path/mediaInfo -
+    done here, up front, so a 404/gone file is weeded out (and marked
+    scanned, so it's never retried) before worker.py ever sees it."""
     scanned = db.get_scanned_ids("sonarr")
-    candidates = _sonarr_candidates(scanned, limit)
-    for series, ep, file_id in candidates:
+    out = []
+    for series, ep, file_id in _sonarr_candidates(scanned, limit):
         label = (
             f"TV: {series.get('title')} "
             f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
@@ -170,69 +150,25 @@ def _scan_sonarr(limit):
             ef = arr_client.request_json("sonarr", "GET", f"/api/v3/episodefile/{file_id}")
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
-                # file got deleted/replaced between listing episodes and looking
-                # this one up - nothing left to check, and no point retrying it
-                db.mark_scanned("sonarr", file_id, label=label, result="skipped: file no longer exists")
+                db.mark_scanned("sonarr", file_id, label=label,
+                                 result="skipped: file no longer exists")
                 continue
             print(f"[backlog] sonarr file {file_id} lookup failed:\n"
                   f"{traceback.format_exc()}", flush=True)
             continue
         except Exception:
-            # one bad lookup should never stop the rest of this pass
             print(f"[backlog] sonarr file {file_id} lookup failed:\n"
                   f"{traceback.format_exc()}", flush=True)
             continue
         if not ef:
-            # file record gone - nothing to check, don't retry
             db.mark_scanned("sonarr", file_id, label=label, result="skipped: file record gone")
             continue
         is_anime = series.get("seriesType") == "anime"
-        try:
-            _check_one(
-                "sonarr", ext_id=series.get("id"), label=label,
-                episode_id=ep.get("id"), file_id=file_id, path=ef.get("path"),
-                media_info=ef.get("mediaInfo") or {}, size=ef.get("size", 0),
-                listed_runtime=series.get("runtime", 0),
-                expect_languages=["eng", "jpn"] if is_anime else ["eng"],
-            )
-        except Exception:
-            print(f"[backlog] sonarr file {file_id} check failed:\n"
-                  f"{traceback.format_exc()}", flush=True)
-    return len(candidates)
-
-
-def run_backlog_scan_once():
-    """One throttled pass. Radarr gets the full budget first, Sonarr gets
-    whatever's left - simple and predictable, not an attempt at perfect
-    fairness between the two libraries."""
-    budget = batch_size()
-    done = 0
-    try:
-        done += _scan_radarr(budget)
-    except RuntimeError:
-        pass  # Radarr not configured yet
-    except Exception:
-        print(f"[backlog] radarr scan failed:\n{traceback.format_exc()}", flush=True)
-    remaining = max(0, budget - done)
-    if remaining:
-        try:
-            done += _scan_sonarr(remaining)
-        except RuntimeError:
-            pass  # Sonarr not configured yet
-        except Exception:
-            print(f"[backlog] sonarr scan failed:\n{traceback.format_exc()}", flush=True)
-    if done:
-        print(f"[backlog] checked {done} previously-unscanned file(s) this pass", flush=True)
-    return done
-
-
-def start_backlog_scanner():
-    def loop():
-        while True:
-            try:
-                run_backlog_scan_once()
-            except Exception:
-                print(f"[backlog] pass failed:\n{traceback.format_exc()}", flush=True)
-            time.sleep(interval_seconds())
-
-    threading.Thread(target=loop, daemon=True).start()
+        out.append({
+            "source": "sonarr", "ext_id": series.get("id"), "label": label,
+            "episode_id": ep.get("id"), "file_id": file_id, "path": ef.get("path"),
+            "media_info": ef.get("mediaInfo") or {}, "size": ef.get("size", 0),
+            "listed_runtime": series.get("runtime", 0),
+            "expect_languages": ["eng", "jpn"] if is_anime else ["eng"],
+        })
+    return out

@@ -49,6 +49,22 @@ def init_db():
         conn.execute("ALTER TABLE scanned ADD COLUMN result TEXT")
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            ext_id INTEGER,
+            episode_id INTEGER,
+            file_id INTEGER NOT NULL,
+            download_id TEXT,
+            label TEXT NOT NULL,
+            path TEXT,
+            enqueued_at TEXT NOT NULL,
+            UNIQUE(source, file_id)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS issues (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source TEXT NOT NULL,          -- 'radarr' or 'sonarr'
@@ -168,6 +184,54 @@ def count_scanned(source):
     row = conn.execute("SELECT COUNT(*) AS n FROM scanned WHERE source=?", (source,)).fetchone()
     conn.close()
     return row["n"]
+
+
+def enqueue(source, file_id, label, *, ext_id=None, episode_id=None,
+            download_id=None, path=None):
+    """Add a newly-imported file to the deep-check queue (real ffmpeg decode
+    test) - called from webhooks.py right after the live, fast checks pass,
+    so the slow decode test runs soon after on the worker thread instead of
+    blocking the webhook response. UNIQUE(source, file_id) + INSERT OR IGNORE
+    means a duplicate webhook delivery for the same file is a no-op here,
+    same dedup principle as everything else in this app."""
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO queue "
+        "(source, ext_id, episode_id, file_id, download_id, label, path, enqueued_at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (source, ext_id, episode_id, file_id, download_id, label, path, now()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def pop_queue_item():
+    """Pop the oldest queued item (FIFO by id, which tracks enqueue order) for
+    the worker to process, or None if the queue's empty. Select-then-delete
+    in one connection - fine for a single-consumer worker, no need for
+    SELECT...FOR UPDATE-style locking."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM queue ORDER BY id ASC LIMIT 1").fetchone()
+    if row:
+        conn.execute("DELETE FROM queue WHERE id=?", (row["id"],))
+        conn.commit()
+    conn.close()
+    return dict(row) if row else None
+
+
+def count_queue():
+    conn = get_conn()
+    row = conn.execute("SELECT COUNT(*) AS n FROM queue").fetchone()
+    conn.close()
+    return row["n"]
+
+
+def list_queue(limit=50):
+    """Pending queue items, oldest (next up) first - for the Queue UI page."""
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM queue ORDER BY id ASC LIMIT ?", (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def list_recent_scanned(limit=30):

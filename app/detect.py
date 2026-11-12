@@ -25,6 +25,7 @@ NOT YET PORTED - needs the real source first, not a guess:
     See README "Known gaps".
 """
 import os
+import shutil
 import subprocess
 import time
 
@@ -164,6 +165,22 @@ def broken_reason(host_path, deep=False):
     return None
 
 
+def _niced(cmd):
+    """Prefix a command with nice/ionice if they're available, so this
+    workload yields CPU and disk I/O to everything else on the box (Plex
+    transcodes, Radarr/Sonarr, the array itself) instead of competing with
+    it. This matters a lot more now that the decode test runs continuously
+    (queue + backlog-fill worker) rather than a few throttled files a day.
+    Falls back to the bare command if either binary's missing - never an
+    error, just no niceing."""
+    prefix = []
+    if shutil.which("ionice"):
+        prefix += ["ionice", "-c3"]  # idle I/O class - only runs when nothing else wants the disk
+    if shutil.which("nice"):
+        prefix += ["nice", "-n", "19"]  # lowest CPU scheduling priority
+    return prefix + cmd if prefix else cmd
+
+
 def decode_test(host_path, seconds=DECODE_SECONDS):
     """ffmpeg decode test over the first N seconds. Returns an error string,
     or None if it looks fine (or the test is disabled/file missing).
@@ -179,8 +196,8 @@ def decode_test(host_path, seconds=DECODE_SECONDS):
     timeout = seconds * 4 + 120
     try:
         out = subprocess.run(
-            ["ffmpeg", "-nostdin", "-v", "error", "-t", str(seconds), "-i", host_path,
-             "-map", "0:v:0", "-map", "0:a:0?", "-f", "null", "-"],
+            _niced(["ffmpeg", "-nostdin", "-v", "error", "-t", str(seconds), "-i", host_path,
+                    "-map", "0:v:0", "-map", "0:a:0?", "-f", "null", "-"]),
             capture_output=True, text=True, timeout=timeout,
         )
     except subprocess.TimeoutExpired:

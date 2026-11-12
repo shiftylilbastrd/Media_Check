@@ -25,11 +25,11 @@ SECTIONS = [
         ("pushover_token", "Pushover Application Token", "", True),
         ("pushover_user_key", "Pushover User Key", "", True),
     ], "pushover"),
-    ("Backlog scan", [
-        ("backlog_scan_batch_size", "Files per pass", "20", False),
-        ("backlog_scan_interval_hours", "Hours between passes", "24", False),
-    ], None),
 ]
+# Backlog scan batch-size/interval settings were removed here: the worker
+# (worker.py) now processes continuously - new imports first, backlog fill
+# whenever that queue's empty - with nice/ionice protecting other services
+# instead of a manual schedule. See the Queue page.
 
 # Flattened (key, label, placeholder, is_secret) - used for save/load, same as before.
 FIELDS = [field for _, fields, _ in SECTIONS for field in fields]

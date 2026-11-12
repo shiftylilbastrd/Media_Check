@@ -1,8 +1,10 @@
-"""Daily fallback poll - a safety net, not the primary trigger. The webhook
-receivers in webhooks.py handle normal operation (near-instant, on import);
-this just re-checks the last ~26h of import history once a day in case a
-webhook delivery was missed (arr restart mid-notification, network blip, this
-app being down at that moment)."""
+"""Reconciliation sweep - a safety net, not the primary trigger. The webhook
+receivers in webhooks.py handle normal operation (near-instant: fast checks
+inline, then queued for worker.py's real decode test); this just re-checks
+the last ~26h of import history every few hours in case a webhook delivery
+was ever missed entirely (arr restart mid-notification, network blip, this
+app being down at that moment) - anything already scanned or already queued
+is left alone, this only enqueues what's missing."""
 import threading
 import time
 import traceback
@@ -10,17 +12,14 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from . import actions
 from . import arr_client
 from . import db
-from . import detect
-from . import notify
 
-POLL_INTERVAL_SECONDS = 24 * 3600
+RECONCILE_INTERVAL_SECONDS = 6 * 3600
 LOOKBACK_HOURS = 26  # same overlap the old hourly script used
 
 
-def _poll_radarr():
+def _reconcile_radarr():
     since = (datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
@@ -28,11 +27,13 @@ def _poll_radarr():
         "radarr", "GET",
         f"/api/v3/history/since?date={since}&eventType=downloadFolderImported",
     ) or []
+    scanned = db.get_scanned_ids("radarr")
     seen = set()
+    found = 0
     for rec in history:
         try:
             file_id = (rec.get("data") or {}).get("fileId")
-            if not file_id or file_id in seen:
+            if not file_id or file_id in seen or file_id in scanned:
                 continue
             seen.add(file_id)
             mf = arr_client.request_json("radarr", "GET", f"/api/v3/moviefile/{file_id}")
@@ -42,44 +43,23 @@ def _poll_radarr():
             if not movie:
                 continue
             label = f"Movie: {movie.get('title')} ({movie.get('year')})"
-            host_path = mf.get("path")
-            bad = detect.broken_reason(host_path, deep=True) if host_path else None
-            if bad:
-                issue_id, acted = actions.auto_replace_broken(
-                    "radarr", movie.get("id"), label, bad,
-                    file_id=file_id, download_id=rec.get("downloadId"), path=host_path,
-                )
-                if acted:
-                    notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
-                continue
-            problems = detect.check_media_info(
-                mf.get("mediaInfo") or {}, mf.get("size", 0), movie.get("runtime", 0),
-                expect_languages=["eng"],
+            db.enqueue(
+                "radarr", file_id, label,
+                ext_id=movie.get("id"), download_id=rec.get("downloadId"), path=mf.get("path"),
             )
-            new_problems = [
-                (category, reason) for category, reason in problems
-                if db.find_issue("radarr", file_id, category) is None
-            ]
-            for category, reason in problems:
-                db.record_issue(
-                    "radarr", movie.get("id"), label, category, reason,
-                    file_id=file_id, download_id=rec.get("downloadId"), path=host_path,
-                )
-            if new_problems:
-                body = "\n".join(f"- {reason}" for _, reason in new_problems)
-                notify.send(f"media-check-tools: {label}", body)
+            found += 1
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 continue  # this one file/movie no longer exists - nothing left to check
-            print(f"[scheduler] radarr history record {rec.get('id')} failed:\n"
+            print(f"[reconcile] radarr history record {rec.get('id')} failed:\n"
                   f"{traceback.format_exc()}", flush=True)
         except Exception:
-            # one bad record should never stop the rest of this poll from running
-            print(f"[scheduler] radarr history record {rec.get('id')} failed:\n"
+            print(f"[reconcile] radarr history record {rec.get('id')} failed:\n"
                   f"{traceback.format_exc()}", flush=True)
+    return found
 
 
-def _poll_sonarr():
+def _reconcile_sonarr():
     since = (datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
@@ -87,11 +67,13 @@ def _poll_sonarr():
         "sonarr", "GET",
         f"/api/v3/history/since?date={since}&eventType=downloadFolderImported",
     ) or []
+    scanned = db.get_scanned_ids("sonarr")
     seen = set()
+    found = 0
     for rec in history:
         try:
             file_id = (rec.get("data") or {}).get("fileId")
-            if not file_id or file_id in seen:
+            if not file_id or file_id in seen or file_id in scanned:
                 continue
             seen.add(file_id)
             ef = arr_client.request_json("sonarr", "GET", f"/api/v3/episodefile/{file_id}")
@@ -101,63 +83,48 @@ def _poll_sonarr():
             series = arr_client.request_json("sonarr", "GET", f"/api/v3/series/{rec['seriesId']}")
             if not ep or not series:
                 continue
-            is_anime = series.get("seriesType") == "anime"
             label = (
                 f"TV: {series.get('title')} "
                 f"S{ep.get('seasonNumber', 0):02d}E{ep.get('episodeNumber', 0):02d}"
             )
-            host_path = ef.get("path")
-            bad = detect.broken_reason(host_path, deep=True) if host_path else None
-            if bad:
-                issue_id, acted = actions.auto_replace_broken(
-                    "sonarr", series.get("id"), label, bad,
-                    episode_id=rec.get("episodeId"), file_id=file_id,
-                    download_id=rec.get("downloadId"), path=host_path,
-                )
-                if acted:
-                    notify.send(f"media-check-tools: {label}", db.get_issue(issue_id)["reason"])
-                continue
-            problems = detect.check_media_info(
-                ef.get("mediaInfo") or {}, ef.get("size", 0), series.get("runtime", 0),
-                expect_languages=["eng", "jpn"] if is_anime else ["eng"],
+            db.enqueue(
+                "sonarr", file_id, label,
+                ext_id=series.get("id"), episode_id=rec.get("episodeId"),
+                download_id=rec.get("downloadId"), path=ef.get("path"),
             )
-            new_problems = [
-                (category, reason) for category, reason in problems
-                if db.find_issue("sonarr", file_id, category) is None
-            ]
-            for category, reason in problems:
-                db.record_issue(
-                    "sonarr", series.get("id"), label, category, reason,
-                    episode_id=rec.get("episodeId"), file_id=file_id,
-                    download_id=rec.get("downloadId"), path=host_path,
-                )
-            if new_problems:
-                body = "\n".join(f"- {reason}" for _, reason in new_problems)
-                notify.send(f"media-check-tools: {label}", body)
+            found += 1
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 continue  # this one episode/series no longer exists - nothing left to check
-            print(f"[scheduler] sonarr history record {rec.get('id')} failed:\n"
+            print(f"[reconcile] sonarr history record {rec.get('id')} failed:\n"
                   f"{traceback.format_exc()}", flush=True)
         except Exception:
-            print(f"[scheduler] sonarr history record {rec.get('id')} failed:\n"
+            print(f"[reconcile] sonarr history record {rec.get('id')} failed:\n"
                   f"{traceback.format_exc()}", flush=True)
+    return found
 
 
-def _poll_once():
-    for name, fn in (("radarr", _poll_radarr), ("sonarr", _poll_sonarr)):
+def reconcile_once():
+    total = 0
+    for name, fn in (("radarr", _reconcile_radarr), ("sonarr", _reconcile_sonarr)):
         try:
-            fn()
+            total += fn()
         except RuntimeError:
-            pass  # not configured yet - nothing to poll until Settings is filled in
+            pass  # not configured yet - nothing to reconcile until Settings is filled in
         except Exception:
-            print(f"[scheduler] {name} poll failed:\n{traceback.format_exc()}", flush=True)
+            print(f"[reconcile] {name} sweep failed:\n{traceback.format_exc()}", flush=True)
+    if total:
+        print(f"[reconcile] queued {total} import(s) missed by the webhook path", flush=True)
+    return total
 
 
 def start_scheduler():
     def loop():
         while True:
-            _poll_once()
-            time.sleep(POLL_INTERVAL_SECONDS)
+            try:
+                reconcile_once()
+            except Exception:
+                print(f"[reconcile] pass failed:\n{traceback.format_exc()}", flush=True)
+            time.sleep(RECONCILE_INTERVAL_SECONDS)
 
     threading.Thread(target=loop, daemon=True).start()

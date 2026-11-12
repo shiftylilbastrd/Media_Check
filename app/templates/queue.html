@@ -1,14 +1,21 @@
 {% extends "base.html" %}
+{% from "_pager.html" import pager %}
 {% block content %}
-<h2 style="margin-top:0;">Queue</h2>
+<h2>Queue</h2>
 <p class="reason" style="margin-bottom:20px;">
   New imports are checked here first, in the order they were downloaded. Once this is
   empty, the worker fills idle time by working through the existing library instead -
   see the <a href="{{ url_for('queue_ui.log') }}">Log</a> for that.
 </p>
 
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="num">{{ total }}</div>
+    <div class="lbl">Pending</div>
+  </div>
+</div>
+
 {% if pending %}
-<p class="reason" style="margin-bottom:10px;">{{ pending_count }} pending - top of the list is next up.</p>
 <table>
   <thead><tr><th>Item</th><th>Source</th><th>Queued</th></tr></thead>
   <tbody>
@@ -16,11 +23,12 @@
     <tr>
       <td class="label">{{ row.label }}</td>
       <td>{{ row.source }}</td>
-      <td>{{ row.enqueued_at[:16] }}</td>
+      <td title="{{ row.enqueued_at[:16] }}">{{ row.enqueued_at|timeago }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+{{ pager('queue_ui.index', page, per_page, total, per_page_choices) }}
 {% else %}
 <div class="empty">Nothing queued right now - the worker's filling idle time from the existing library.</div>
 {% endif %}

@@ -39,6 +39,27 @@ def sonarr_total():
     return sum((s.get("statistics") or {}).get("episodeFileCount", 0) for s in series_list)
 
 
+def refresh_totals_cache():
+    """Refreshes the cached scanned/total figures the Log page reads, so that
+    page never makes a live Radarr/Sonarr call itself on page load. With a
+    large library (thousands of movies/episodes), those live listing calls
+    were adding real, noticeable latency to every page view - called
+    periodically by worker.py instead, well off the request path."""
+    try:
+        db.set_setting("cache_radarr_total", str(radarr_total()))
+    except RuntimeError:
+        pass  # Radarr not configured yet
+    except Exception:
+        print(f"[backlog] radarr total refresh failed:\n{traceback.format_exc()}", flush=True)
+    try:
+        db.set_setting("cache_sonarr_total", str(sonarr_total()))
+    except RuntimeError:
+        pass  # Sonarr not configured yet
+    except Exception:
+        print(f"[backlog] sonarr total refresh failed:\n{traceback.format_exc()}", flush=True)
+    db.set_setting("cache_totals_at", db.now())
+
+
 def check_one(source, *, ext_id, label, file_id, path, media_info, size,
               listed_runtime, expect_languages, episode_id=None, download_id=None):
     """Same dispatch order as webhooks.py: broken-file check first (fully

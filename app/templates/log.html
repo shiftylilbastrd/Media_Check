@@ -1,14 +1,20 @@
 {% extends "base.html" %}
+{% from "_pager.html" import pager %}
 {% block content %}
-<h2 style="margin-top:0;">Completion log</h2>
-<p class="reason" style="margin-bottom:20px;">What the worker's actually checked, newest first.</p>
+<h2>Completion log</h2>
+<p class="reason" style="margin-bottom:20px;">
+  What the worker's actually checked, newest first.
+  {% if totals_at %}<span style="opacity:.7;" title="{{ totals_at[:16] }}">(totals as of {{ totals_at|timeago }})</span>{% endif %}
+</p>
 
-<div style="display:flex; gap:20px; margin-bottom:24px; flex-wrap:wrap;">
-  <div class="cat" style="padding:10px 16px; font-size:14px;">
-    Radarr: <strong>{{ radarr_scanned }}</strong>{% if radarr_total is not none %} / {{ radarr_total }}{% endif %} scanned
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="num">{{ radarr_scanned }}{% if radarr_total is not none %} / {{ radarr_total }}{% endif %}</div>
+    <div class="lbl">Radarr scanned</div>
   </div>
-  <div class="cat" style="padding:10px 16px; font-size:14px;">
-    Sonarr: <strong>{{ sonarr_scanned }}</strong>{% if sonarr_total is not none %} / {{ sonarr_total }}{% endif %} scanned
+  <div class="stat-card">
+    <div class="num">{{ sonarr_scanned }}{% if sonarr_total is not none %} / {{ sonarr_total }}{% endif %}</div>
+    <div class="lbl">Sonarr scanned</div>
   </div>
 </div>
 
@@ -21,17 +27,22 @@
       <td class="label">{{ row.label or ('file #' ~ row.file_id) }}</td>
       <td>{{ row.source }}</td>
       <td>
-        {% if row.result %}
-          <span class="reason">{{ row.result }}</span>
+        {% if not row.result %}
+          <span class="cat pill-ok">clean</span>
+        {% elif row.result.startswith('skipped:') %}
+          <span class="cat">{{ row.result }}</span>
+        {% elif row.result.startswith('broken:') %}
+          <span class="cat pill-bad">{{ row.result }}</span>
         {% else %}
-          <span class="cat">clean</span>
+          <span class="cat pill-warn">{{ row.result }}</span>
         {% endif %}
       </td>
-      <td>{{ row.scanned_at[:16] }}</td>
+      <td title="{{ row.scanned_at[:16] }}">{{ row.scanned_at|timeago }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+{{ pager('queue_ui.log', page, per_page, total, per_page_choices) }}
 {% else %}
 <div class="empty">Nothing scanned yet.</div>
 {% endif %}

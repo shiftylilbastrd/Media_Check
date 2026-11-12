@@ -226,23 +226,25 @@ def count_queue():
     return row["n"]
 
 
-def list_queue(limit=50):
+def list_queue(limit=50, offset=0):
     """Pending queue items, oldest (next up) first - for the Queue UI page."""
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM queue ORDER BY id ASC LIMIT ?", (limit,)).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM queue ORDER BY id ASC LIMIT ? OFFSET ?", (limit, offset)
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def list_recent_scanned(limit=30):
+def list_recent_scanned(limit=30, offset=0):
     """Most recent backlog-scan activity across both sources, newest first -
-    this is what the Backlog UI page shows so there's visible proof of what
-    the scanner's actually doing, not just a silent file count."""
+    this is what the Log UI page shows so there's visible proof of what the
+    worker's actually doing, not just a silent file count."""
     conn = get_conn()
     rows = conn.execute(
         "SELECT source, file_id, label, result, scanned_at FROM scanned "
-        "ORDER BY scanned_at DESC LIMIT ?",
-        (limit,),
+        "ORDER BY scanned_at DESC LIMIT ? OFFSET ?",
+        (limit, offset),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

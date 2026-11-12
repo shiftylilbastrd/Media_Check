@@ -10,6 +10,9 @@ def create_app():
     app.secret_key = os.environ.get("SECRET_KEY", "dev-key-change-me")
     db.init_db()
 
+    from .filters import timeago
+    app.jinja_env.filters["timeago"] = timeago
+
     from .webhooks import bp as webhooks_bp
     from .issues_routes import bp as issues_bp
     from .settings_routes import bp as settings_bp

@@ -6,20 +6,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root { color-scheme: dark; }
-    body { background:#11161d; color:#e6e9ee; font-family:-apple-system,"Segoe UI",sans-serif; margin:0; }
-    header { background:#1a2029; padding:14px 24px; display:flex; justify-content:space-between;
-              align-items:center; border-bottom:1px solid #2b3340; }
-    header a.brand { color:#e6e9ee; text-decoration:none; font-weight:700; }
-    header nav a { margin-left:18px; color:#98a1b0; text-decoration:none; font-weight:500; }
-    header nav a.active { color:#f07a35; }
-    main { max-width:960px; margin:24px auto; padding:0 20px; }
+    * { box-sizing: border-box; }
+    body { background:#11161d; color:#e6e9ee; font-family:-apple-system,"Segoe UI",sans-serif; margin:0;
+           display:flex; min-height:100vh; }
+
+    /* --- sidebar --- */
+    aside { width:220px; flex:0 0 220px; background:#161b23; border-right:1px solid #2b3340;
+            padding:20px 0; display:flex; flex-direction:column; }
+    aside .brand { color:#e6e9ee; text-decoration:none; font-weight:700; padding:0 20px 20px;
+                   border-bottom:1px solid #2b3340; margin-bottom:12px; display:block; }
+    aside nav { display:flex; flex-direction:column; gap:2px; padding:0 10px; }
+    aside nav a { color:#98a1b0; text-decoration:none; font-weight:500; padding:9px 12px;
+                  border-radius:6px; font-size:14px; }
+    aside nav a:hover { background:#1e2530; color:#e6e9ee; }
+    aside nav a.active { background:#2b2014; color:#f07a35; font-weight:600; }
+
+    main { flex:1; min-width:0; padding:28px 32px; max-width:1100px; }
+
+    /* --- stat cards --- */
+    .stat-cards { display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+    .stat-card { background:#161b23; border:1px solid #2b3340; border-radius:10px;
+                 padding:16px 20px; min-width:150px; }
+    .stat-card .num { font-size:26px; font-weight:700; color:#e6e9ee; line-height:1.1; }
+    .stat-card .lbl { font-size:12px; color:#98a1b0; text-transform:uppercase; letter-spacing:.05em;
+                       margin-top:4px; }
+
     table { width:100%; border-collapse:collapse; }
     th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #2b3340; vertical-align:top; }
     th { color:#98a1b0; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
     .label { font-weight:600; }
     .reason { color:#98a1b0; font-size:14px; margin-top:2px; }
-    .cat { display:inline-block; font-size:11px; padding:2px 6px; border-radius:4px;
-           background:#222a35; color:#98a1b0; margin-top:6px; }
+
+    /* --- pill badges --- */
+    .cat { display:inline-block; font-size:11px; padding:3px 9px; border-radius:999px;
+           background:#222a35; color:#98a1b0; margin-top:6px; font-weight:600; }
+    .pill-ok { background:#163826; color:#5fd37a; }
+    .pill-warn { background:#3a2a16; color:#f0a73a; }
+    .pill-bad { background:#3a1818; color:#e8604c; }
+
     form.inline { display:inline; margin-right:6px; }
     button { background:#2b3340; color:#e6e9ee; border:1px solid #3a4454; border-radius:6px;
               padding:6px 12px; cursor:pointer; font-size:13px; }
@@ -43,10 +67,19 @@
     .test-result { font-size:13px; }
     .test-result.ok { color:#5fd37a; }
     .test-result.fail { color:#e8604c; }
+
+    /* --- pagination --- */
+    .pager { display:flex; align-items:center; justify-content:space-between; margin-top:18px;
+             gap:14px; flex-wrap:wrap; }
+    .pager .pages a, .pager .pages span { margin-right:10px; color:#98a1b0; text-decoration:none; }
+    .pager .pages a:hover { color:#e6e9ee; }
+    .pager select { background:#161b23; color:#e6e9ee; border:1px solid #2b3340; border-radius:6px;
+                     padding:5px 8px; font-size:13px; }
+    h2 { margin:0 0 4px; }
   </style>
 </head>
 <body>
-  <header>
+  <aside>
     <a class="brand" href="{{ url_for('issues.index') }}">media-check-tools</a>
     <nav>
       <a href="{{ url_for('issues.index') }}"
@@ -58,7 +91,7 @@
       <a href="{{ url_for('settings.edit') }}"
          class="{{ 'active' if request.endpoint == 'settings.edit' else '' }}">Settings</a>
     </nav>
-  </header>
+  </aside>
   <main>
     {% with messages = get_flashed_messages() %}
       {% if messages %}{% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}{% endif %}

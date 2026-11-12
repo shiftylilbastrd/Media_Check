@@ -26,6 +26,9 @@ from . import notify
 
 IDLE_SLEEP_SECONDS = 60  # nothing queued, nothing left in the backlog either - check back in a bit
 BACKLOG_PREFETCH = 10  # small batches, so Radarr/Sonarr's full library isn't re-listed every file
+TOTALS_REFRESH_SECONDS = 1800  # how often the Log page's scanned/total figures get refreshed
+
+_last_totals_refresh = 0
 
 # In-memory only - refilled from Radarr/Sonarr as needed. Losing these on a
 # restart is harmless: they're just "next up" candidates, re-derived from
@@ -115,9 +118,25 @@ def run_once():
     return False
 
 
+def _maybe_refresh_totals():
+    """Refreshes the Log page's cached scanned/total figures on a timer,
+    well off the request path - see backlog.refresh_totals_cache(). Runs
+    once immediately on startup too, so a fresh deploy isn't stuck showing
+    nothing for 30 minutes."""
+    global _last_totals_refresh
+    if time.time() - _last_totals_refresh < TOTALS_REFRESH_SECONDS:
+        return
+    try:
+        backlog.refresh_totals_cache()
+    except Exception:
+        print(f"[worker] totals refresh failed:\n{traceback.format_exc()}", flush=True)
+    _last_totals_refresh = time.time()
+
+
 def start_worker():
     def loop():
         while True:
+            _maybe_refresh_totals()
             try:
                 did_work = run_once()
             except Exception:

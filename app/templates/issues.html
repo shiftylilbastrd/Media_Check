@@ -20,7 +20,7 @@
         <span class="cat">{{ issue.category }}</span>
       </td>
       <td>{{ issue.status }}</td>
-      <td>{{ issue.detected_at[:16] }}</td>
+      <td title="{{ issue.detected_at[:16] }}">{{ issue.detected_at|timeago }}</td>
       <td>
         {% if issue.status == 'open' %}
         <form class="inline" method="post"

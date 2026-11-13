@@ -21,6 +21,11 @@
                   border-radius:6px; font-size:14px; }
     aside nav a:hover { background:#1e2530; color:#e6e9ee; }
     aside nav a.active { background:#2b2014; color:#f07a35; font-weight:600; }
+    aside .cap-widget { margin-top:auto; padding:14px 20px 0; border-top:1px solid #2b3340; }
+    aside .cap-widget .cap-label { font-size:11px; color:#98a1b0; text-transform:uppercase;
+              letter-spacing:.05em; }
+    aside .cap-widget .cap-num { font-size:15px; font-weight:700; color:#e6e9ee; margin:4px 0 8px; }
+    aside .cap-widget button { width:100%; font-size:12px; padding:6px 10px; }
 
     main { flex:1; min-width:0; padding:28px 32px; max-width:1100px; }
 
@@ -93,6 +98,14 @@
       <a href="{{ url_for('settings.edit') }}"
          class="{{ 'active' if request.endpoint == 'settings.edit' else '' }}">Settings</a>
     </nav>
+    <div class="cap-widget" title="A broken file gets auto-deleted, blocklisted, and re-searched - up to this many per day, as a brake against a systemic false-positive auto-deleting a big chunk of the library.">
+      <div class="cap-label">Auto-fixed today</div>
+      <div class="cap-num">{{ auto_replace.count }} / {{ auto_replace.cap }}</div>
+      <form method="post" action="{{ url_for('settings.reset_auto_replace_counter') }}"
+            onsubmit="return confirm('Reset today\'s auto-replace counter? This lets up to {{ auto_replace.cap }} more files get auto-deleted+re-searched today without waiting for UTC midnight. Nothing already auto-fixed is undone or removed from the Log.');">
+        <button type="submit">Reset counter</button>
+      </form>
+    </div>
   </aside>
   <main>
     {% with messages = get_flashed_messages() %}

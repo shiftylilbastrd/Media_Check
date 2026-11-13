@@ -57,7 +57,6 @@ def edit():
     values = {key: db.get_setting(key, "") for key, _, _, _ in FIELDS}
     return render_template(
         "settings.html", sections=SECTIONS, values=values, test_fields=TEST_FIELD_MAP,
-        auto_replace=actions.auto_replace_status(),
     )
 
 

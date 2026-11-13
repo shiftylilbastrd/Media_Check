@@ -14,6 +14,14 @@ def create_app():
     app.jinja_env.filters["timeago"] = timeago
     app.jinja_env.filters["duration"] = duration
 
+    @app.context_processor
+    def _inject_auto_replace_status():
+        # Powers the Auto-Replace Cap widget in the sidebar (base.html) on
+        # every page, not just Settings - a context processor instead of
+        # threading it through every route's render_template() call.
+        from . import actions
+        return {"auto_replace": actions.auto_replace_status()}
+
     from .webhooks import bp as webhooks_bp
     from .issues_routes import bp as issues_bp
     from .settings_routes import bp as settings_bp

@@ -63,6 +63,29 @@ def _normalize_langs(raw):
     return [str(p).strip().lower() for p in raw if str(p).strip()]
 
 
+# ISO 639-1 -> ISO 639-2 equivalents for the languages this app ever checks
+# against (expect_languages is always ["eng"], or ["eng", "jpn"] for anime).
+# audioLanguages has been observed from real Radarr payloads as a regional,
+# BCP-47-style tag ("en-us", "pt-br"), not just a bare ISO 639-2 code
+# ("eng") - comparing those directly meant a file with real English audio
+# tagged "en-us" was flagged as having none at all.
+_LANG_ALIASES = {
+    "eng": {"eng", "en"},
+    "jpn": {"jpn", "ja", "jp"},
+}
+
+
+def _lang_base(code):
+    """"en-us" -> "en", "pt-br" -> "pt", "eng" -> "eng" - drop any
+    region/script subtag before comparing."""
+    return code.split("-")[0].split("_")[0]
+
+
+def _has_expected_language(langs, expect_languages):
+    bases = {_lang_base(lang) for lang in langs}
+    return any(bases & _LANG_ALIASES.get(expected, {expected}) for expected in expect_languages)
+
+
 def check_media_info(media_info, size_bytes, listed_runtime_min, expect_languages):
     """Mirrors the old bash check_file(). Returns a list of (category, reason).
     expect_languages: e.g. ["eng"] or ["eng", "jpn"] for anime.
@@ -82,7 +105,7 @@ def check_media_info(media_info, size_bytes, listed_runtime_min, expect_language
     if not codec:
         problems.append(("no_audio", "no audio track"))
     elif langs:
-        have_expected = any(lang in langs for lang in expect_languages)
+        have_expected = _has_expected_language(langs, expect_languages)
         if not have_expected and "und" not in langs:
             problems.append((
                 "no_english_audio",

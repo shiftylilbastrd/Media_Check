@@ -22,6 +22,14 @@ def create_app():
         from . import actions
         return {"auto_replace": actions.auto_replace_status()}
 
+    @app.context_processor
+    def _inject_open_issue_count():
+        # Powers the red count badge next to "Issues" in the sidebar, and the
+        # tab title/favicon badge - on every page, so it's visible no matter
+        # where you're navigated to, not just on the Issues page itself.
+        from . import db
+        return {"open_issue_count": db.count_issues(status="open")}
+
     from .webhooks import bp as webhooks_bp
     from .issues_routes import bp as issues_bp
     from .settings_routes import bp as settings_bp

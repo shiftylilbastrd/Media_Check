@@ -387,6 +387,16 @@ def list_issues(status=None):
     return [dict(r) for r in rows]
 
 
+def count_issues(status=None):
+    conn = get_conn()
+    if status:
+        row = conn.execute("SELECT COUNT(*) AS n FROM issues WHERE status=?", (status,)).fetchone()
+    else:
+        row = conn.execute("SELECT COUNT(*) AS n FROM issues").fetchone()
+    conn.close()
+    return row["n"]
+
+
 def find_issue(source, file_id, category):
     conn = get_conn()
     row = conn.execute(

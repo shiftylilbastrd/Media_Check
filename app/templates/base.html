@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{% block title %}Media Check{% endblock %}</title>
+  <title>{% if open_issue_count %}({{ open_issue_count if open_issue_count <= 99 else '99+' }}) {% endif %}{% block title %}Media Check{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
@@ -18,9 +18,12 @@
                    border-bottom:1px solid #2b3340; margin-bottom:12px; display:block; }
     aside nav { display:flex; flex-direction:column; gap:2px; padding:0 10px; }
     aside nav a { color:#98a1b0; text-decoration:none; font-weight:500; padding:9px 12px;
-                  border-radius:6px; font-size:14px; }
+                  border-radius:6px; font-size:14px; display:flex; align-items:center;
+                  justify-content:space-between; }
     aside nav a:hover { background:#1e2530; color:#e6e9ee; }
     aside nav a.active { background:#2b2014; color:#f07a35; font-weight:600; }
+    .nav-badge { background:#e8604c; color:#fff; font-size:11px; font-weight:700;
+                 padding:1px 6px; border-radius:999px; line-height:1.5; }
     aside .cap-widget { margin-top:auto; padding:14px 20px 0; border-top:1px solid #2b3340; }
     aside .cap-widget .cap-label { font-size:11px; color:#98a1b0; text-transform:uppercase;
               letter-spacing:.05em; }
@@ -90,7 +93,10 @@
     <a class="brand" href="{{ url_for('issues.index') }}">Media Check</a>
     <nav>
       <a href="{{ url_for('issues.index') }}"
-         class="{{ 'active' if request.endpoint == 'issues.index' else '' }}">Issues</a>
+         class="{{ 'active' if request.endpoint == 'issues.index' else '' }}">
+        <span>Issues</span>
+        {% if open_issue_count %}<span class="nav-badge">{{ open_issue_count if open_issue_count <= 99 else '99+' }}</span>{% endif %}
+      </a>
       <a href="{{ url_for('queue_ui.index') }}"
          class="{{ 'active' if request.endpoint == 'queue_ui.index' else '' }}">Queue</a>
       <a href="{{ url_for('queue_ui.log') }}"
@@ -113,5 +119,35 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <script>
+    (function () {
+      var count = {{ open_issue_count | int }};
+      var iconLink = document.querySelector('link[rel="icon"]');
+      if (count <= 0 || !iconLink) return;
+      var label = count > 99 ? '99+' : String(count);
+      var img = new Image();
+      img.onload = function () {
+        var size = 64;
+        var canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, size, size);
+        var r = label.length > 2 ? 18 : 14;
+        var cx = size - r + 2, cy = r;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = '#e8604c';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold ' + (label.length > 2 ? 16 : 20) + 'px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, cx, cy + 1);
+        iconLink.href = canvas.toDataURL('image/png');
+      };
+      img.src = iconLink.getAttribute('href');
+    })();
+  </script>
 </body>
 </html>

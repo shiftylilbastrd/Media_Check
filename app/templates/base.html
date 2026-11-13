@@ -98,7 +98,10 @@
         {% if open_issue_count %}<span class="nav-badge">{{ open_issue_count if open_issue_count <= 99 else '99+' }}</span>{% endif %}
       </a>
       <a href="{{ url_for('queue_ui.index') }}"
-         class="{{ 'active' if request.endpoint == 'queue_ui.index' else '' }}">Queue</a>
+         class="{{ 'active' if request.endpoint == 'queue_ui.index' else '' }}">
+        <span>Queue</span>
+        {% if queue_count %}<span class="nav-badge">{{ queue_count if queue_count <= 99 else '99+' }}</span>{% endif %}
+      </a>
       <a href="{{ url_for('queue_ui.log') }}"
          class="{{ 'active' if request.endpoint == 'queue_ui.log' else '' }}">Log</a>
       <a href="{{ url_for('settings.edit') }}"

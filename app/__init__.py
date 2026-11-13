@@ -30,6 +30,15 @@ def create_app():
         from . import db
         return {"open_issue_count": db.count_issues(status="open")}
 
+    @app.context_processor
+    def _inject_queue_count():
+        # Powers the badge next to "Queue" in the sidebar only - unlike the
+        # Issues badge, this doesn't touch the tab title/favicon (per Ryan:
+        # "in the menu but not the tab").
+        from . import db
+        return {"queue_count": db.count_queue()}
+
+
     from .webhooks import bp as webhooks_bp
     from .issues_routes import bp as issues_bp
     from .settings_routes import bp as settings_bp

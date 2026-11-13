@@ -1,6 +1,7 @@
 import requests
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 
+from . import actions
 from . import db
 from . import plex_sso
 
@@ -56,7 +57,16 @@ def edit():
     values = {key: db.get_setting(key, "") for key, _, _, _ in FIELDS}
     return render_template(
         "settings.html", sections=SECTIONS, values=values, test_fields=TEST_FIELD_MAP,
+        auto_replace=actions.auto_replace_status(),
     )
+
+
+@bp.route("/settings/auto-replace/reset-counter", methods=["POST"])
+def reset_auto_replace_counter():
+    """Doesn't delete or change any issue - see actions.reset_auto_replace_counter()."""
+    actions.reset_auto_replace_counter()
+    flash("Auto-replace counter reset - today's cap is counting fresh from now.")
+    return redirect(url_for("settings.edit"))
 
 
 @bp.route("/settings/plex/connect")

@@ -24,11 +24,35 @@ MAX_AUTO_REPLACE_PER_DAY = int(os.environ.get("MAX_AUTO_REPLACE_PER_DAY", "10"))
 
 
 def _auto_replace_count_today():
+    """Counts today's (UTC) successful auto-replaces, same as the cap check
+    uses. A manual reset (reset_auto_replace_counter()) doesn't delete or
+    touch any issue row - it just records when the window should start
+    counting from instead, so today's full history stays visible via the
+    Log's "Auto-fixed" filter or Issues' ?status=auto_fixed, while the cap
+    itself re-opens from that point forward."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return sum(
-        1 for i in db.list_issues(status="auto_fixed")
-        if i["category"] == "broken" and i["detected_at"].startswith(today)
-    )
+    reset_at = db.get_setting("auto_replace_cap_reset_at")
+    count = 0
+    for i in db.list_issues(status="auto_fixed"):
+        if i["category"] != "broken":
+            continue
+        if not i["detected_at"].startswith(today):
+            continue
+        if reset_at and i["detected_at"] < reset_at:
+            continue
+        count += 1
+    return count
+
+
+def auto_replace_status():
+    """Today's auto-replace count vs. the cap, for display in Settings."""
+    return {"count": _auto_replace_count_today(), "cap": MAX_AUTO_REPLACE_PER_DAY}
+
+
+def reset_auto_replace_counter():
+    """Manually re-opens today's auto-replace cap without waiting for UTC
+    midnight and without touching any issue row - see _auto_replace_count_today()."""
+    db.set_setting("auto_replace_cap_reset_at", db.now())
 
 
 def auto_replace_broken(source, ext_id, label, reason, *, episode_id=None,

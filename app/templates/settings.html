@@ -28,6 +28,26 @@
   <p style="margin-top:20px;"><button type="submit" class="fix">Save</button></p>
 </form>
 
+<fieldset class="settings-section">
+  <legend>Auto-Replace Cap</legend>
+  <p class="reason">
+    A broken file found during a scan gets deleted, blocklisted, and
+    re-searched automatically - up to
+    <strong>{{ auto_replace.cap }}</strong> per day, as a brake against a
+    systemic false-positive auto-deleting a big chunk of the library.
+    Past the cap, a broken file is left on the Issues page for a manual
+    Ignore/Fix now call instead.
+  </p>
+  <p style="font-size:15px; margin:12px 0;">
+    <strong>{{ auto_replace.count }} / {{ auto_replace.cap }}</strong>
+    auto-fixed today (UTC)
+  </p>
+  <form method="post" action="{{ url_for('settings.reset_auto_replace_counter') }}"
+        onsubmit="return confirm('Reset today\'s auto-replace counter? This lets up to {{ auto_replace.cap }} more files get auto-deleted+re-searched today without waiting for UTC midnight. Nothing already auto-fixed is undone or removed from the Log.');">
+    <button type="submit">Reset counter</button>
+  </form>
+</fieldset>
+
 <script>
 document.querySelectorAll('.test-btn').forEach(function (btn) {
   btn.addEventListener('click', async function () {

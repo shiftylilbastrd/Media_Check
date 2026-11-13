@@ -89,6 +89,7 @@ def init_db():
     )
     conn.commit()
     _migrate_strip_label_prefixes(conn)
+    _migrate_scanned_autofix_bucket(conn)
     conn.close()
 
 
@@ -112,6 +113,38 @@ def _migrate_strip_label_prefixes(conn):
             )
     conn.execute(
         "INSERT INTO settings (key, value) VALUES ('migrated_label_prefix_removed', '1') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    )
+    conn.commit()
+
+
+def _migrate_scanned_autofix_bucket(conn):
+    """One-time cleanup: `scanned` rows written before the Log gained a
+    separate "auto-fixed" bucket still have their old `result` text
+    ("broken: <reason>") even for files that were in fact successfully
+    auto-replaced - changing how new rows get classified doesn't touch rows
+    already in the DB. For every scanned row still saying "broken:" whose
+    matching issues row (same source/file_id, category='broken') is actually
+    status=auto_fixed, rewrite the Log's result to the "auto-fixed:" bucket
+    so old history matches what new rows look like. Guarded by a settings
+    flag so this doesn't re-join scanned/issues on every startup forever."""
+    if conn.execute(
+        "SELECT value FROM settings WHERE key='migrated_scanned_autofix_bucket'"
+    ).fetchone():
+        return
+    rows = conn.execute(
+        "SELECT s.source AS source, s.file_id AS file_id, i.reason AS reason "
+        "FROM scanned s JOIN issues i "
+        "ON i.source = s.source AND i.file_id = s.file_id AND i.category = 'broken' "
+        "WHERE s.result LIKE 'broken:%' AND i.status = 'auto_fixed'"
+    ).fetchall()
+    for row in rows:
+        conn.execute(
+            "UPDATE scanned SET result = ? WHERE source = ? AND file_id = ?",
+            (f"auto-fixed: {row['reason']}", row["source"], row["file_id"]),
+        )
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('migrated_scanned_autofix_bucket', '1') "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
     )
     conn.commit()
